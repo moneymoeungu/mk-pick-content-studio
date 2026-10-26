@@ -154,8 +154,45 @@ function stripCitationBrackets(val) {
   return val;
 }
 
-// Perplexity API 실시간 호출 헬퍼 (search_recency_filter 적용 + 각주 번호 제거)
-async function callPerplexityJson(apiKey, systemPrompt, userPrompt, recencyFilter = 'month') {
+// Perplexity API 실시간 사용량·비용(버닝) 추적 및 30분 트렌드 캐시 (단순 F5 새로고침 시 중복 과금 원천 방지)
+const TREND_CACHE_TTL_MS = 30 * 60 * 1000; // 30분 캐시
+let cachedTrendRadar = null;
+let cachedTrendTimestamp = 0;
+
+const apiUsageStats = {
+  model: 'sonar',
+  totalCalls: 0,
+  trendCalls: 0,
+  draftCalls: 0,
+  promptTokens: 0,
+  completionTokens: 0,
+  totalTokens: 0,
+  estimatedCostUsd: 0,
+  estimatedCostKrw: 0,
+  lastCalledAt: null,
+  cacheHitsOnRefresh: 0
+};
+
+function recordPerplexityUsage(usage = {}, callType = 'draft') {
+  const pTokens = Number(usage.prompt_tokens) || 950;
+  const cTokens = Number(usage.completion_tokens) || 1450;
+  apiUsageStats.totalCalls += 1;
+  if (callType === 'trend') apiUsageStats.trendCalls += 1;
+  else apiUsageStats.draftCalls += 1;
+
+  apiUsageStats.promptTokens += pTokens;
+  apiUsageStats.completionTokens += cTokens;
+  apiUsageStats.totalTokens += pTokens + cTokens;
+
+  // Perplexity sonar 공식 요금: 요청당 $0.005 ($5 / 1K requests) + 입력 $1/1M tokens + 출력 $1/1M tokens
+  const callCostUsd = 0.005 + (pTokens / 1_000_000) * 1.0 + (cTokens / 1_000_000) * 1.0;
+  apiUsageStats.estimatedCostUsd = Number((apiUsageStats.estimatedCostUsd + callCostUsd).toFixed(5));
+  apiUsageStats.estimatedCostKrw = Math.round(apiUsageStats.estimatedCostUsd * 1380);
+  apiUsageStats.lastCalledAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+}
+
+// Perplexity API 실시간 호출 헬퍼 (search_recency_filter 적용 + 각주 번호 제거 + 토큰/비용 기록)
+async function callPerplexityJson(apiKey, systemPrompt, userPrompt, recencyFilter = 'month', callType = 'draft') {
   const payload = {
     model: 'sonar',
     temperature: 0.2,
@@ -181,6 +218,7 @@ async function callPerplexityJson(apiKey, systemPrompt, userPrompt, recencyFilte
   }
 
   const data = await res.json();
+  recordPerplexityUsage(data?.usage, callType);
   const content = data?.choices?.[0]?.message?.content || '';
   const citations = Array.isArray(data?.citations) ? data.citations : [];
 
@@ -214,7 +252,7 @@ ${rawLiveContext}
   "portalRetailTrends": [{"keyword": "편의점·다이소·백화점 신상 키워드 (10개)", "badge": "포털·유통 신상", "desc": "이번 주 출시·품절·프로모션 팩트 1문장"}],
   "googleTrends": [{"keyword": "오늘·이번주 급상승 키워드 (10개)", "badge": "실시간 급상승", "desc": "급상승 배경 1문장"}]
 }`;
-  const { parsed } = await callPerplexityJson(apiKey, sys, usr, 'week');
+  const { parsed } = await callPerplexityJson(apiKey, sys, usr, 'week', 'trend');
   return parsed;
 }
 
@@ -754,13 +792,14 @@ const server = http.createServer(async (req, res) => {
   const pathname = parsedUrl.pathname;
 
   try {
-    // 0. Perplexity API 키 설정 조회 및 저장 (/api/config)
+    // 0. Perplexity API 키 설정 및 실시간 API 버닝(사용량·과금) 상태 조회 (/api/config)
     if (pathname === '/api/config' && req.method === 'GET') {
       const db = readDb();
       const key = db.config?.perplexityApiKey || '';
       return sendJson(res, 200, {
         hasPerplexityKey: Boolean(key),
-        maskedKey: key ? `${key.slice(0, 8)}...${key.slice(-4)}` : ''
+        maskedKey: key ? `${key.slice(0, 8)}...${key.slice(-4)}` : '',
+        apiUsageStats
       });
     }
 
@@ -771,20 +810,41 @@ const server = http.createServer(async (req, res) => {
       db.config = db.config || {};
       db.config.perplexityApiKey = rawKey;
       writeDb(db);
+      cachedTrendRadar = null;
+      cachedTrendTimestamp = 0;
       return sendJson(res, 200, {
         ok: true,
         hasPerplexityKey: Boolean(rawKey),
-        maskedKey: rawKey ? `${rawKey.slice(0, 8)}...${rawKey.slice(-4)}` : ''
+        maskedKey: rawKey ? `${rawKey.slice(0, 8)}...${rawKey.slice(-4)}` : '',
+        apiUsageStats
       });
     }
 
-    // 1. 실시간 트렌드 레이더 API (Perplexity 키가 있으면 Perplexity 실시간 트렌드 검색 연동 가능)
+    // 1. 실시간 트렌드 레이더 API (30분 스마트 캐시 적용으로 단순 웹 접속·F5 새로고침 시 API 중복 버닝 원천 차단!)
     if (pathname === '/api/trends' && req.method === 'GET') {
       const db = readDb();
       const apiKey = db.config?.perplexityApiKey || '';
-      const forcePplx = parsedUrl.searchParams.get('pplx') === '1' || Boolean(apiKey);
+      const explicitRefresh = parsedUrl.searchParams.get('refresh') === '1';
+      const now = Date.now();
+
+      if (!explicitRefresh && cachedTrendRadar && now - cachedTrendTimestamp < TREND_CACHE_TTL_MS) {
+        apiUsageStats.cacheHitsOnRefresh += 1;
+        return sendJson(res, 200, {
+          ...cachedTrendRadar,
+          fromCache: true,
+          apiUsageStats
+        });
+      }
+
+      const forcePplx = Boolean(apiKey);
       const radar = await fetchLiveTrendRadar(apiKey, forcePplx);
-      return sendJson(res, 200, radar);
+      cachedTrendRadar = radar;
+      cachedTrendTimestamp = now;
+      return sendJson(res, 200, {
+        ...radar,
+        fromCache: false,
+        apiUsageStats
+      });
     }
 
     // 2. 실시간 뉴스 검색 API

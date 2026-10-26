@@ -347,10 +347,14 @@
       .join('\n');
   }
 
-  async function loadTrends() {
+  async function loadTrends(forceRefresh = false) {
     state.isLoadingTrends = true;
     try {
-      const radar = await apiFetch('/api/trends');
+      const url = forceRefresh ? '/api/trends?refresh=1' : '/api/trends';
+      const radar = await apiFetch(url);
+      if (radar.apiUsageStats) {
+        state.apiUsageStats = radar.apiUsageStats;
+      }
       state.trendRadar = {
         googleTrends: radar.googleTrends || CURATED_TREND_TOPICS.google || [],
         portalRetailTrends: radar.portalRetailTrends || CURATED_TREND_TOPICS.portalRetail || [],
@@ -374,6 +378,9 @@
       const cfg = await apiFetch('/api/config');
       state.hasPerplexityKey = Boolean(cfg.hasPerplexityKey);
       state.maskedKey = cfg.maskedKey || '';
+      if (cfg.apiUsageStats) {
+        state.apiUsageStats = cfg.apiUsageStats;
+      }
     } catch (e) {
       state.hasPerplexityKey = false;
     }
@@ -393,20 +400,56 @@
     render();
   }
 
-  function openApiKeyModal() {
+  async function openApiKeyModal() {
+    await loadConfig();
     const modalRoot = document.getElementById('modalRoot');
     if (!modalRoot) return;
+    const stats = state.apiUsageStats || {
+      model: 'sonar',
+      totalCalls: 0,
+      trendCalls: 0,
+      draftCalls: 0,
+      totalTokens: 0,
+      estimatedCostUsd: 0,
+      estimatedCostKrw: 0,
+      cacheHitsOnRefresh: 0
+    };
 
     modalRoot.innerHTML = `
       <div style="position: fixed; inset: 0; background: rgba(17, 24, 39, 0.45); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 20px;">
-        <div class="card" style="width: 100%; max-width: 480px; margin-bottom: 0; padding: 24px 28px;">
+        <div class="card" style="width: 100%; max-width: 520px; margin-bottom: 0; padding: 24px 28px;">
           <div class="flex-between mb-8">
-            <h3 style="font-size: 17px; font-weight: 800;">Perplexity API 키 설정</h3>
+            <h3 style="font-size: 17px; font-weight: 800;">Perplexity API 설정 · 실시간 과금(버닝) 모니터</h3>
             <button type="button" class="text-action" id="closeApiModalBtn" style="font-size: 16px;">✕</button>
           </div>
-          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.55;">
-            Perplexity API 키(<code>pplx-...</code>)를 등록하면 <strong>오늘 기준 실제 최신 트렌드 키워드 발굴</strong>과 <strong>5가지 유형별 맞춤형 기사 초안·요약표·FAQ 생성</strong>에 즉시 반영됩니다.
+          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.55;">
+            현재 가장 경제적인 온라인 검색 모델인 <strong><code>sonar</code></strong> 모델을 사용하며, <strong>30분 스마트 캐시</strong>가 적용되어 단순 웹 접속이나 브라우저 새로고침(<code>F5</code>) 시에는 API가 중복 호출되지 않습니다(0원).
           </p>
+
+          <!-- 실시간 API 사용량 & 예상 비용 대시보드 -->
+          <div style="padding: 12px 14px; background-color: var(--bg-subtle); border: var(--border-thin); border-radius: var(--radius-general); margin-bottom: 14px;">
+            <div class="flex-between mb-6">
+              <strong style="font-size: 12.5px; color: var(--text-primary);">📊 현재 세션 API 호출 및 예상 버닝 현황</strong>
+              <span style="font-size: 11.5px; color: var(--mk-orange); font-weight: 700;">1회 호출당 약 $0.008 (약 11원)</span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center;">
+              <div style="padding: 8px; background: var(--white); border: var(--border-thin); border-radius: 6px;">
+                <div style="font-size: 11px; color: var(--text-muted);">누적 API 호출</div>
+                <div style="font-size: 15px; font-weight: 800; color: var(--text-primary);">${stats.totalCalls}회</div>
+                <div style="font-size: 10.5px; color: var(--text-secondary);">트렌드 ${stats.trendCalls} · 초안 ${stats.draftCalls}</div>
+              </div>
+              <div style="padding: 8px; background: var(--white); border: var(--border-thin); border-radius: 6px;">
+                <div style="font-size: 11px; color: var(--text-muted);">누적 예상 소진액</div>
+                <div style="font-size: 15px; font-weight: 800; color: var(--mk-orange);">약 ${stats.estimatedCostKrw}원</div>
+                <div style="font-size: 10.5px; color: var(--text-secondary);">$${stats.estimatedCostUsd} (${stats.totalTokens.toLocaleString()} 토큰)</div>
+              </div>
+              <div style="padding: 8px; background: var(--white); border: var(--border-thin); border-radius: 6px;">
+                <div style="font-size: 11px; color: var(--text-muted);">새로고침 캐시 방어</div>
+                <div style="font-size: 15px; font-weight: 800; color: var(--status-green);">${stats.cacheHitsOnRefresh}회 절약</div>
+                <div style="font-size: 10.5px; color: var(--text-secondary);">F5 접속 시 0원</div>
+              </div>
+            </div>
+          </div>
 
           ${state.hasPerplexityKey ? `
             <div style="font-size: 12.5px; color: var(--status-green); background: var(--status-green-bg); padding: 8px 12px; border-radius: var(--radius-general); margin-bottom: 12px; font-weight: 700;">
@@ -501,9 +544,11 @@
       ` : ''}
     `;
 
+    const calls = state.apiUsageStats?.totalCalls || 0;
+    const krw = state.apiUsageStats?.estimatedCostKrw || 0;
     meta.innerHTML = `
       <button type="button" class="btn btn-sm" id="openApiKeyModalBtn" style="border-color: ${state.hasPerplexityKey ? '#8FD4B2' : 'var(--mk-orange)'}; color: ${state.hasPerplexityKey ? 'var(--status-green)' : 'var(--mk-orange)'}; background-color: ${state.hasPerplexityKey ? 'var(--status-green-bg)' : 'var(--mk-orange-light)'}; font-weight: 700;">
-        ${state.hasPerplexityKey ? '🟢 Perplexity API 연결됨' : '⚙ Perplexity API 키 설정'}
+        ${state.hasPerplexityKey ? `🟢 Perplexity 연결됨 · 호출 ${calls}회 (약 ${krw}원)` : '⚙ Perplexity API 키 설정 · 사용량 확인'}
       </button>
     `;
 
@@ -567,6 +612,7 @@
           autoMatchType
         })
       });
+      await loadConfig();
       state.isSearchingNews = false;
       state.currentWork = res.work;
       state.works.unshift(res.work);
@@ -1018,7 +1064,7 @@
 
     document.getElementById('refreshTrendRadarBtn')?.addEventListener('click', async () => {
       syncHomeInputs();
-      await loadTrends();
+      await loadTrends(true);
       showToast('구글 트렌드 및 포털 실시간 화제 키워드 10선을 최신 상태로 업데이트했습니다.');
       render(true);
     });
