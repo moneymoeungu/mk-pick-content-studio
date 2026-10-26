@@ -1,0 +1,2388 @@
+// MK Pick 콘텐츠 스튜디오 프론트엔드 (v3: 트렌드 키워드 레이더 + 타 언론사 문장 복제 방지 재가공 + 전체 GEO 체크리스트 + 즉각 반응 통합 에디터)
+(function () {
+  const {
+    CONTENT_TYPES,
+    MK_PICK_CATEGORIES,
+    MONTHLY_MARKETING_CALENDAR,
+    GEO_CHECKLIST_ITEMS,
+    CURATED_TREND_TOPICS,
+    detectBestContentType,
+    recommendMkPickCategory,
+    paraphraseNewsToMkFact,
+    buildPresetScenario,
+    buildDynamicScenario,
+    createWorkObject,
+    getInitialWorks,
+    extractFactSentencesFromSections
+  } = window.MK_MOCK_DATA;
+
+  const state = {
+    screen: 'home', // 'home' | 'editor'
+    works: [],
+    currentWork: null,
+    trendTab: 'shortform', // 'shortform' | 'newsletter' | 'portal' | 'google'
+    homeDiscoveryTab: 'trends', // 'trends' | 'calendar' | 'works'
+    calendarMonth: new Date().getMonth() + 1 || 10,
+    showExternalCalendarEmbed: false,
+    externalCalProvider: 'nasmedia', // 'nasmedia' | 'iboss'
+    trendRadar: {
+      googleTrends: [],
+      portalRetailTrends: [],
+      shortFormTrends: [],
+      newsletterTrends: CURATED_TREND_TOPICS.newsletter || []
+    },
+    isLoadingTrends: false,
+    homeInput: {
+      keyword: '',
+      company: '',
+      url: '',
+      rawText: '',
+      typeId: 4
+    },
+    showRawPasteInput: false,
+    fanoutOpen: true,
+    leftPanelTab: 'memo', // 'memo' | 'check' | 'outline'
+    editorViewMode: 'edit', // 'edit' | 'preview'
+    isSearchingNews: false,
+    lastHighlightedElementId: null
+  };
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function showToast(msg) {
+    const root = document.getElementById('toastRoot');
+    if (!root) return;
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    root.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  }
+
+  function flashElement(elId) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.style.transition = 'background-color 0.25s ease, border-color 0.25s ease';
+    el.style.backgroundColor = '#FFF0E5';
+    el.style.borderColor = '#F37021';
+    const rect = el.getBoundingClientRect();
+    if (rect.top < 70 || rect.bottom > window.innerHeight - 40) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    setTimeout(() => {
+      el.style.backgroundColor = '';
+      el.style.borderColor = '';
+    }, 1200);
+  }
+
+  async function apiFetch(url, options = {}) {
+    const res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || '요청 처리 중 오류가 발생했습니다.');
+    }
+    return data;
+  }
+
+  // 기사 본문 전체의 GEO 최적화 달성 여부를 실시간 자동 진단하는 함수
+  function evaluateGeoChecklist(w) {
+    if (!w) return { passedCount: 0, total: GEO_CHECKLIST_ITEMS.length, details: [] };
+    const sb = w.summaryBlocks || {};
+    const title = w.title || '';
+    const firstBody = w.draftSections?.[0]?.content || '';
+    const allBody = (w.draftSections || []).map(s => s.content || '').join('\n');
+    const numberRegex = /\d+(?:,\d+)?\s*(?:년|월|일|만\s*원|억|원|%|곳|명|종|개|배|시간|세|위|회)/;
+
+    const checks = {
+      'geo-1': /["“”']/.test(title) && (title.includes('…') || title.includes('...')),
+      'geo-2': (sb.aiFactSummary || []).filter(line => line.trim().length > 5).length >= 3,
+      'geo-3': firstBody.includes('?'),
+      'geo-4': numberRegex.test(allBody),
+      'geo-5': (sb.summaryTable?.rows || []).length >= 2,
+      'geo-6': (sb.faqs || []).length >= 5,
+      'geo-7': (sb.oneLineSummary || '').trim().startsWith('한 줄 요약!') && /합니다\.|습니다\./.test(allBody)
+    };
+
+    const details = GEO_CHECKLIST_ITEMS.map(item => ({
+      ...item,
+      passed: Boolean(checks[item.id])
+    }));
+    const passedCount = details.filter(d => d.passed).length;
+    return { passedCount, total: details.length, details };
+  }
+
+  // CMS 붙여넣기용 전체 순수 텍스트 생성
+  function buildPlainTextArticle(w) {
+    if (!w) return '';
+    const sb = w.summaryBlocks || {};
+    const activeSources = (w.sources || []).filter(s => !s.excluded);
+    const lines = [];
+
+    if (sb.byline) lines.push(`[${sb.byline}]`);
+    if (sb.companyTags && sb.companyTags.length > 0) {
+      lines.push(`태그: ${sb.companyTags.map(t => '#' + t).join(' ')}`);
+    }
+    lines.push('');
+    lines.push(w.title || '');
+    lines.push('');
+
+    if (sb.aiFactSummary && sb.aiFactSummary.length > 0) {
+      lines.push('[AI 팩트 체크 요약]');
+      sb.aiFactSummary.forEach(item => lines.push(item));
+      lines.push('');
+    }
+
+    if (sb.subtitle) {
+      lines.push(sb.subtitle);
+      lines.push('');
+    }
+
+    (w.draftSections || []).forEach(sec => {
+      if (sec.title) lines.push(`■ ${sec.title}`);
+      if (sec.content) lines.push(sec.content);
+      lines.push('');
+    });
+
+    if (sb.summaryTable && sb.summaryTable.rows && sb.summaryTable.rows.length > 0) {
+      lines.push(sb.summaryTable.title || '[요약표]');
+      lines.push((sb.summaryTable.headers || []).join(' | '));
+      lines.push('-'.repeat(48));
+      sb.summaryTable.rows.forEach(r => {
+        lines.push(r.join(' | '));
+      });
+      lines.push('');
+    }
+
+    if (sb.faqs && sb.faqs.length > 0) {
+      lines.push('[자주 묻는 질문 (FAQ)]');
+      sb.faqs.forEach(f => {
+        lines.push(f.q);
+        lines.push(`A. ${f.a}`);
+        lines.push('');
+      });
+    }
+
+    if (sb.oneLineSummary) {
+      lines.push(sb.oneLineSummary);
+      lines.push('');
+    }
+
+    if (sb.noticeText) {
+      lines.push(sb.noticeText);
+      lines.push('');
+    }
+
+    if (sb.imageRecommendations && sb.imageRecommendations.length > 0) {
+      lines.push('[이미지 캡션]');
+      sb.imageRecommendations.forEach(img => {
+        lines.push(`${img.position}: ${img.caption}`);
+      });
+      lines.push('');
+    }
+
+    if (activeSources.length > 0) {
+      lines.push('[참고 자료 및 출처 목록]');
+      activeSources.forEach((s, i) => {
+        lines.push(`${i + 1}. ${s.title} (${s.url})`);
+      });
+    }
+
+    return lines.join('\n').trim();
+  }
+
+  async function saveCurrentWork(silent = true) {
+    if (!state.currentWork) return;
+    updateLiveStatsAndGeoUI();
+    try {
+      const targetWork = state.currentWork;
+      const res = await apiFetch(`/api/works/${targetWork.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(targetWork)
+      });
+      // 객체 참조(reference)를 교체하지 않고 기존 state.currentWork 내부 메타데이터만 갱신하여 이벤트 핸들러 클로저 끊김 원천 방지
+      if (res.work && targetWork === state.currentWork) {
+        targetWork.updatedAt = res.work.updatedAt || targetWork.updatedAt;
+      }
+      const idx = state.works.findIndex(w => w.id === targetWork.id);
+      if (idx !== -1) state.works[idx] = targetWork;
+      if (!silent) showToast('변경사항이 저장되었습니다.');
+    } catch (err) {
+      // 서버 일시 중단 시에도 화면 편집은 그대로 유지
+      console.warn('Auto-save warning:', err.message);
+    }
+  }
+
+  function updateLiveStatsAndGeoUI() {
+    if (!state.currentWork) return;
+    const charEl = document.getElementById('liveCharCountBadge');
+    const fcEl = document.getElementById('liveFcCountBadge');
+    const geoHeaderEl = document.getElementById('geoChecklistScoreBadge');
+    const geoListEl = document.getElementById('geoChecklistContainer');
+
+    const fullText = buildPlainTextArticle(state.currentWork);
+    if (charEl) {
+      charEl.textContent = `공백 포함 ${fullText.length.toLocaleString()}자`;
+    }
+    if (fcEl) {
+      const unverified = (state.currentWork.factChecks || []).filter(f => f.status === '미처리').length;
+      fcEl.style.color = unverified > 0 ? 'var(--status-amber)' : 'var(--status-green)';
+      fcEl.textContent = unverified > 0 ? `팩트 확인 필요 ${unverified}건` : '✓ 팩트 확인 완료';
+    }
+
+    const geoEval = evaluateGeoChecklist(state.currentWork);
+    if (geoHeaderEl) {
+      geoHeaderEl.style.color = geoEval.passedCount === geoEval.total ? 'var(--status-green)' : 'var(--mk-orange)';
+      geoHeaderEl.textContent = `${geoEval.passedCount}/${geoEval.total} 충족`;
+    }
+    const leftCheckTabBadge = document.getElementById('leftCheckTabBadge');
+    if (leftCheckTabBadge) {
+      leftCheckTabBadge.textContent = `${geoEval.passedCount}/${geoEval.total}`;
+    }
+    if (geoListEl) {
+      geoListEl.innerHTML = renderGeoChecklistItemsHtml(geoEval.details);
+      bindGeoJumpEvents(geoListEl);
+    }
+  }
+
+  const GEO_JUMP_TARGETS = {
+    'geo-1': 'block-step-2',
+    'geo-2': 'block-step-3',
+    'geo-3': 'block-step-5',
+    'geo-4': 'block-step-5',
+    'geo-5': 'block-step-6',
+    'geo-6': 'block-step-7',
+    'geo-7': 'block-step-8'
+  };
+
+  function renderGeoChecklistItemsHtml(details) {
+    return details.map(item => `
+      <div
+        class="clean-list-row"
+        data-geo-jump="${GEO_JUMP_TARGETS[item.id] || 'block-step-2'}"
+        style="display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; cursor: pointer;"
+        title="클릭하면 오른쪽 기사의 해당 영역으로 바로 이동합니다"
+      >
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 13px; font-weight: 700; color: var(--text-primary); line-height: 1.4;">
+            <span style="color: ${item.passed ? 'var(--status-green)' : 'var(--status-amber)'}; margin-right: 4px;">
+              ${item.passed ? '✓' : '•'}
+            </span>
+            ${escapeHtml(item.title)}
+          </div>
+          <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 2px; padding-left: 16px; line-height: 1.4;">
+            ${escapeHtml(item.desc)}
+          </div>
+        </div>
+        <span style="font-size: 11.5px; font-weight: 700; color: ${item.passed ? 'var(--status-green)' : 'var(--mk-orange)'}; white-space: nowrap; flex-shrink: 0;">
+          ${item.passed ? '✓ 충족' : '보완 이동 →'}
+        </span>
+      </div>
+    `).join('');
+  }
+
+  function bindGeoJumpEvents(container) {
+    if (!container) return;
+    container.querySelectorAll('[data-geo-jump]').forEach(row => {
+      row.addEventListener('click', () => {
+        const targetId = row.getAttribute('data-geo-jump');
+        if (state.editorViewMode === 'preview') {
+          state.editorViewMode = 'edit';
+          render(true);
+        }
+        setTimeout(() => flashElement(targetId), 50);
+      });
+    });
+  }
+
+  function autoResizeTextarea(el) {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.max(el.scrollHeight + 4, 48) + 'px';
+  }
+
+  function autoResizeAllTextareas(root) {
+    (root || document).querySelectorAll('textarea.doc-editable-textarea').forEach(ta => {
+      autoResizeTextarea(ta);
+    });
+  }
+
+  // 본문 단락 문장을 매경 Pick 표준 경어체('~합니다/~입니다')로 깔끔하게 다듬어주는 도우미
+  function polishParagraphToMkStyle(text) {
+    if (!text) return '';
+    return text
+      .split('\n')
+      .map(line => {
+        let s = line.trim();
+        if (!s) return '';
+        s = s
+          .replace(/한다\./g, '합니다.')
+          .replace(/된다\./g, '됩니다.')
+          .replace(/있다\./g, '있습니다.')
+          .replace(/없다\./g, '없습니다.')
+          .replace(/이다\./g, '입니다.')
+          .replace(/했다\./g, '했습니다.')
+          .replace(/됐다\./g, '됐습니다.')
+          .replace(/보인다\./g, '보입니다.')
+          .replace(/나타났다\./g, '나타났습니다.')
+          .replace(/밝혔다\./g, '밝혔습니다.')
+          .replace(/전했다\./g, '전했습니다.')
+          .replace(/분석된다\./g, '분석됩니다.')
+          .replace(/예상된다\./g, '예상됩니다.')
+          .replace(/풀이된다\./g, '풀이됩니다.');
+        if (!/[.?!]$/.test(s) && !s.startsWith('■')) {
+          s += '입니다.';
+        }
+        return s;
+      })
+      .join('\n');
+  }
+
+  async function loadTrends() {
+    state.isLoadingTrends = true;
+    try {
+      const radar = await apiFetch('/api/trends');
+      state.trendRadar = {
+        googleTrends: radar.googleTrends || CURATED_TREND_TOPICS.google || [],
+        portalRetailTrends: radar.portalRetailTrends || CURATED_TREND_TOPICS.portalRetail || [],
+        shortFormTrends: radar.shortFormTrends || CURATED_TREND_TOPICS.shortForm || [],
+        newsletterTrends: radar.newsletterTrends || CURATED_TREND_TOPICS.newsletter || []
+      };
+    } catch (e) {
+      // 정적 배포(GitHub Pages 등) 환경 폴백
+      state.trendRadar = {
+        googleTrends: CURATED_TREND_TOPICS.google || [],
+        portalRetailTrends: CURATED_TREND_TOPICS.portalRetail || [],
+        shortFormTrends: CURATED_TREND_TOPICS.shortForm || [],
+        newsletterTrends: CURATED_TREND_TOPICS.newsletter || []
+      };
+    }
+    state.isLoadingTrends = false;
+  }
+
+  async function loadConfig() {
+    try {
+      const cfg = await apiFetch('/api/config');
+      state.hasPerplexityKey = Boolean(cfg.hasPerplexityKey);
+      state.maskedKey = cfg.maskedKey || '';
+    } catch (e) {
+      state.hasPerplexityKey = false;
+    }
+  }
+
+  async function initApp() {
+    try {
+      await loadConfig();
+      const [worksRes] = await Promise.all([
+        apiFetch('/api/works').catch(() => ({ works: getInitialWorks ? getInitialWorks() : [] })),
+        loadTrends()
+      ]);
+      state.works = worksRes.works || [];
+    } catch (err) {
+      state.works = getInitialWorks ? getInitialWorks() : [];
+    }
+    render();
+  }
+
+  function openApiKeyModal() {
+    const modalRoot = document.getElementById('modalRoot');
+    if (!modalRoot) return;
+
+    modalRoot.innerHTML = `
+      <div style="position: fixed; inset: 0; background: rgba(17, 24, 39, 0.45); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 20px;">
+        <div class="card" style="width: 100%; max-width: 480px; margin-bottom: 0; padding: 24px 28px;">
+          <div class="flex-between mb-8">
+            <h3 style="font-size: 17px; font-weight: 800;">Perplexity API 키 설정</h3>
+            <button type="button" class="text-action" id="closeApiModalBtn" style="font-size: 16px;">✕</button>
+          </div>
+          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.55;">
+            Perplexity API 키(<code>pplx-...</code>)를 등록하면 <strong>오늘 기준 실제 최신 트렌드 키워드 발굴</strong>과 <strong>5가지 유형별 맞춤형 기사 초안·요약표·FAQ 생성</strong>에 즉시 반영됩니다.
+          </p>
+
+          ${state.hasPerplexityKey ? `
+            <div style="font-size: 12.5px; color: var(--status-green); background: var(--status-green-bg); padding: 8px 12px; border-radius: var(--radius-general); margin-bottom: 12px; font-weight: 700;">
+              ✓ 현재 연결된 키: ${escapeHtml(state.maskedKey)}
+            </div>
+          ` : ''}
+
+          <div class="mb-12">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
+              Perplexity API Key 입력
+            </label>
+            <input type="password" class="input" id="pplxApiKeyInput" placeholder="pplx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off" />
+          </div>
+
+          <div class="flex-between" style="padding-top: 8px;">
+            ${state.hasPerplexityKey ? `
+              <button type="button" class="text-action" id="removeApiKeyBtn" style="color: var(--status-red);">연결 해제(키 삭제)</button>
+            ` : '<span></span>'}
+            <div class="flex-row">
+              <button type="button" class="btn" id="cancelApiModalBtn">닫기</button>
+              <button type="button" class="btn btn-primary" id="saveApiKeyBtn">저장 및 실시간 트렌드 반영</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const closeModal = () => {
+      modalRoot.innerHTML = '';
+    };
+
+    document.getElementById('closeApiModalBtn')?.addEventListener('click', closeModal);
+    document.getElementById('cancelApiModalBtn')?.addEventListener('click', closeModal);
+
+    document.getElementById('removeApiKeyBtn')?.addEventListener('click', async () => {
+      await apiFetch('/api/config', {
+        method: 'POST',
+        body: JSON.stringify({ perplexityApiKey: '' })
+      });
+      await loadConfig();
+      closeModal();
+      showToast('Perplexity API 키 연결이 해제되었습니다.');
+      render(true);
+    });
+
+    document.getElementById('saveApiKeyBtn')?.addEventListener('click', async () => {
+      const keyVal = document.getElementById('pplxApiKeyInput')?.value.trim() || '';
+      if (!keyVal) {
+        showToast('Perplexity API 키(pplx-...)를 입력해 주세요.');
+        return;
+      }
+      const saveBtn = document.getElementById('saveApiKeyBtn');
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = '연결 및 트렌드 수집 중...';
+      }
+      try {
+        await apiFetch('/api/config', {
+          method: 'POST',
+          body: JSON.stringify({ perplexityApiKey: keyVal })
+        });
+        await loadConfig();
+        closeModal();
+        showToast('✓ Perplexity API가 연결되었습니다! 실시간 최신 트렌드 키워드를 불러옵니다...');
+        render(true);
+        await loadTrends();
+        showToast('✓ Perplexity 실시간 최신 트렌드 키워드가 반영되었습니다!');
+        render(true);
+      } catch (err) {
+        showToast(err.message);
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = '저장 및 실시간 트렌드 반영';
+        }
+      }
+    });
+  }
+
+  function renderTopbar() {
+    const nav = document.getElementById('topbarNav');
+    const meta = document.getElementById('topbarMeta');
+    if (!nav || !meta) return;
+
+    nav.innerHTML = `
+      <button type="button" class="trend-clean-tab ${state.screen === 'home' ? 'active' : ''}" id="topGoHomeBtn" style="border-bottom-width: 2px; padding: 16px 6px;">
+        홈 · 유형 및 트렌드 선택
+      </button>
+      ${state.currentWork ? `
+        <button type="button" class="trend-clean-tab ${state.screen === 'editor' ? 'active' : ''}" id="topGoEditorBtn" style="border-bottom-width: 2px; padding: 16px 6px; margin-left: 12px;">
+          편집 중인 기사 (${escapeHtml(state.currentWork.keyword)})
+        </button>
+      ` : ''}
+    `;
+
+    meta.innerHTML = `
+      <button type="button" class="btn btn-sm" id="openApiKeyModalBtn" style="border-color: ${state.hasPerplexityKey ? '#8FD4B2' : 'var(--mk-orange)'}; color: ${state.hasPerplexityKey ? 'var(--status-green)' : 'var(--mk-orange)'}; background-color: ${state.hasPerplexityKey ? 'var(--status-green-bg)' : 'var(--mk-orange-light)'}; font-weight: 700;">
+        ${state.hasPerplexityKey ? '🟢 Perplexity API 연결됨' : '⚙ Perplexity API 키 설정'}
+      </button>
+    `;
+
+    document.getElementById('openApiKeyModalBtn')?.addEventListener('click', openApiKeyModal);
+
+    document.getElementById('topGoHomeBtn').addEventListener('click', () => {
+      state.screen = 'home';
+      render();
+    });
+
+    const edBtn = document.getElementById('topGoEditorBtn');
+    if (edBtn) {
+      edBtn.addEventListener('click', () => {
+        state.screen = 'editor';
+        render();
+      });
+    }
+  }
+
+  // 스크롤 위치를 유지하면서 화면을 다시 그리는 함수
+  function render(preserveScroll = false) {
+    const prevWinScroll = preserveScroll ? window.scrollY : 0;
+    const leftPanel = document.querySelector('.left-panel-sticky');
+    const prevLeftScroll = preserveScroll && leftPanel ? leftPanel.scrollTop : 0;
+
+    renderTopbar();
+    const root = document.getElementById('appRoot');
+    if (!root) return;
+
+    if (state.screen === 'home') {
+      renderHomeScreen(root);
+    } else {
+      renderEditorScreen(root);
+    }
+
+    if (preserveScroll) {
+      window.scrollTo(0, prevWinScroll);
+      const newLeftPanel = document.querySelector('.left-panel-sticky');
+      if (newLeftPanel) newLeftPanel.scrollTop = prevLeftScroll;
+    }
+  }
+
+  // 트렌드 키워드 또는 직접 입력으로 바로 기사 초안 생성하는 공통 함수
+  async function startWorkWithKeyword(keyword, typeId = 4, company = '', autoMatchType = false) {
+    const matchedType = autoMatchType ? detectBestContentType(keyword, company, state.homeInput.rawText, typeId) : typeId;
+    const tName = CONTENT_TYPES[matchedType]?.shortName || '맞춤 유형';
+    state.homeInput.typeId = matchedType;
+    state.isSearchingNews = true;
+    showToast(`'${keyword}' 키워드를 [${tName}]에 매칭하여 최신 팩트 기반 초안을 작성합니다...`);
+    render(true);
+    try {
+      const res = await apiFetch('/api/works', {
+        method: 'POST',
+        body: JSON.stringify({
+          mode: 'dynamic',
+          keyword,
+          company,
+          url: state.homeInput.url || '',
+          rawText: state.homeInput.rawText || '',
+          typeId: matchedType,
+          autoMatchType
+        })
+      });
+      state.isSearchingNews = false;
+      state.currentWork = res.work;
+      state.works.unshift(res.work);
+      state.screen = 'editor';
+      const finalTypeName = CONTENT_TYPES[res.work.typeId]?.shortName || tName;
+      const finalCat = res.work.summaryBlocks?.mkCategory || '산업 Q&A';
+      showToast(`✓ [${finalTypeName} · ${finalCat}] '${keyword}' 맞춤 초안이 완성되었습니다!`);
+      render(false);
+    } catch (err) {
+      // GitHub Pages 등 정적 호스팅 환경에서는 클라이언트 엔진으로 즉시 생성
+      state.isSearchingNews = false;
+      const fallbackScenario = (buildDynamicScenario || buildPresetScenario)({
+        keyword,
+        company,
+        url: state.homeInput.url || '',
+        rawText: state.homeInput.rawText || '',
+        selectedType: matchedType
+      });
+      const fallbackWork = createWorkObject
+        ? createWorkObject({
+            typeId: matchedType,
+            keyword,
+            company,
+            url: state.homeInput.url || '',
+            rawText: state.homeInput.rawText || '',
+            scenario: fallbackScenario
+          })
+        : {
+            id: 'work-' + Date.now(),
+            typeId: matchedType,
+            keyword,
+            inputCompany: company,
+            title: fallbackScenario.titleCandidates[0].title,
+            titleCandidates: fallbackScenario.titleCandidates,
+            sources: fallbackScenario.sources,
+            researchItems: fallbackScenario.researchItems,
+            draftSections: fallbackScenario.draftSections,
+            summaryBlocks: fallbackScenario.summaryBlocks,
+            factChecks: fallbackScenario.factChecks,
+            updatedAt: '방금 전'
+          };
+      state.currentWork = fallbackWork;
+      state.works.unshift(fallbackWork);
+      state.screen = 'editor';
+      showToast(`✓ [${tName}] '${keyword}' 맞춤 초안이 완성되었습니다!`);
+      render(false);
+    }
+  }
+
+  // ==========================================================================
+  // 화면 1: 첫 화면 (2단 구조로 대폭 단순화)
+  //   - 상단 카드 1: [새 기사 초안 만들기] (키워드 입력 + 5열 컴팩트 유형 선택 + 단 1개의 명확한 생성 버튼)
+  //   - 하단 카드 2: [소재 발굴 & 작업 보관함] (🔥 실시간 트렌드 10선 | 📅 2026 마케팅 캘린더 | 📂 최근 작업 기사 3탭 전환)
+  // ==========================================================================
+  function renderHomeScreen(root) {
+    const hi = state.homeInput;
+    const selectedTypeInfo = CONTENT_TYPES[hi.typeId] || CONTENT_TYPES[4];
+    const previewCat = recommendMkPickCategory(hi.keyword || selectedTypeInfo.name, hi.typeId, hi.company);
+    const calData = MONTHLY_MARKETING_CALENDAR[state.calendarMonth] || MONTHLY_MARKETING_CALENDAR[10];
+
+    const activeTrendList =
+      state.trendTab === 'shortform'
+        ? state.trendRadar.shortFormTrends
+        : state.trendTab === 'google'
+        ? state.trendRadar.googleTrends
+        : state.trendTab === 'portal'
+        ? state.trendRadar.portalRetailTrends
+        : state.trendRadar.newsletterTrends;
+
+    root.innerHTML = `
+      <!-- 1. 상단 통합 작성 카드: 키워드 입력 + 5대 콘텐츠 유형(5열 그리드) + 초안 만들기 버튼 하나로 완결 -->
+      <div class="card" style="padding: 26px 28px; margin-bottom: 20px;">
+        <div class="flex-between mb-12" style="flex-wrap: wrap; gap: 8px;">
+          <div>
+            <h1 style="font-size: 19px; font-weight: 800; letter-spacing: -0.3px;">새 기사 초안 만들기</h1>
+            <p style="font-size: 13px; color: var(--text-secondary); margin-top: 2px;">
+              <strong>① 키워드</strong>를 입력하고 <strong>② 콘텐츠 유형(01~05)</strong>을 고른 뒤 우측 <strong>[초안 만들기 →]</strong> 버튼을 누르세요.
+            </p>
+          </div>
+          <span id="toggleRawPasteBtn" class="text-action" style="text-decoration: underline;">
+            ${state.showRawPasteInput ? '보도자료 / 참고 URL 입력창 접기 ▲' : '+ 보도자료 원문이나 참고 URL 추가 (선택)'}
+          </span>
+        </div>
+
+        <!-- STEP 1: 키워드 · 기업명 입력 + 단 1개의 명확한 실행 버튼 -->
+        <div style="display: grid; grid-template-columns: 1.6fr 1fr auto; gap: 10px; align-items: end; margin-bottom: 18px;">
+          <div>
+            <label style="display:block; font-size:12px; font-weight:800; color:var(--text-primary); margin-bottom:5px;">
+              <span style="color: var(--mk-orange); margin-right: 4px;">STEP 1</span>트렌드 키워드 / 주제
+            </label>
+            <input type="text" class="input" id="homeKeywordInput" placeholder="예: 한남동 팔란티어 팝업 품절, 다이소 뷰티, 10월 10일 임산부의 날..." value="${escapeHtml(hi.keyword)}" style="padding: 11px 14px; font-size: 14px;" />
+          </div>
+          <div>
+            <label style="display:block; font-size:12px; font-weight:700; color:var(--text-secondary); margin-bottom:5px;">
+              기업·브랜드명 <span style="font-weight: 400; color: var(--text-muted);">(선택 · 쉼표로 복수 입력 가능)</span>
+            </label>
+            <input type="text" class="input" id="homeCompanyInput" placeholder="예: 매일유업, 유한킴벌리" value="${escapeHtml(hi.company)}" style="padding: 11px 14px; font-size: 14px;" />
+          </div>
+          <div>
+            <button class="btn btn-primary btn-lg" id="homeStartDynamicBtn" style="height: 44px; padding: 0 24px; font-size: 14.5px; font-weight: 800;" ${state.isSearchingNews ? 'disabled' : ''}>
+              ${state.isSearchingNews ? '팩트 수집 및 작성 중...' : '✨ 초안 만들기 →'}
+            </button>
+          </div>
+        </div>
+
+        ${state.showRawPasteInput ? `
+          <div class="grid-2 mb-16" style="padding: 12px 14px; background-color: var(--bg-subtle); border: var(--border-thin); border-radius: var(--radius-general);">
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; margin-bottom:4px;">참고 URL (업체 홈페이지·보도자료 링크)</label>
+              <input type="url" class="input" id="homeUrlInput" placeholder="https://..." value="${escapeHtml(hi.url)}" />
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; margin-bottom:4px;">보도자료 핵심 문구 붙여넣기</label>
+              <input type="text" class="input" id="homeRawTextInput" placeholder="기사에 꼭 들어갈 수치나 기업 서비스 내용을 붙여넣으세요" value="${escapeHtml(hi.rawText)}" />
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- STEP 2: 5가지 콘텐츠 유형 선택 (한 줄 5열 컴팩트 그리드) -->
+        <div style="padding-top: 14px; border-top: var(--border-thin);">
+          <div class="flex-between mb-8" style="flex-wrap: wrap; gap: 6px;">
+            <div style="font-size: 12px; font-weight: 800; color: var(--text-primary);">
+              <span style="color: var(--mk-orange); margin-right: 4px;">STEP 2</span>콘텐츠 유형 선택 (5대 템플릿 · 키워드 입력 시 자동 추천되며 직접 변경 가능)
+            </div>
+            <div style="font-size: 12px; color: var(--text-secondary);">
+              추천 MK Pick 카테고리: <strong style="color: var(--mk-orange);">[${escapeHtml(previewCat.recommendedCategory)}]</strong>
+            </div>
+          </div>
+
+          <div class="home-type-grid">
+            ${Object.values(CONTENT_TYPES).map(t => {
+              const isSelected = Number(hi.typeId) === t.id;
+              return `
+                <div class="home-type-card ${isSelected ? 'selected' : ''}" data-select-home-type="${t.id}">
+                  <div>
+                    <div class="flex-between mb-6">
+                      <span style="font-size: 12px; font-weight: 800; color: ${isSelected ? 'var(--mk-orange)' : 'var(--text-muted)'};">
+                        유형 0${t.id}
+                      </span>
+                      <span style="font-size: 11px; font-weight: 700; color: ${isSelected ? 'var(--mk-orange)' : 'var(--text-secondary)'}; background-color: ${isSelected ? 'var(--white)' : 'var(--bg-subtle)'}; border: var(--border-thin); padding: 1px 6px; border-radius: 4px;">
+                        ${escapeHtml(t.defaultCategory)}
+                      </span>
+                    </div>
+                    <div style="font-size: 13.5px; font-weight: 800; color: ${isSelected ? 'var(--mk-orange)' : 'var(--text-primary)'}; margin-bottom: 4px; line-height: 1.35;">
+                      ${escapeHtml(t.name)}
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.45;">
+                      ${escapeHtml(t.desc)}
+                    </div>
+                  </div>
+                  <div style="margin-top: 10px; padding-top: 8px; border-top: var(--border-thin); font-size: 11.5px; font-weight: ${isSelected ? '800' : '600'}; color: ${isSelected ? 'var(--mk-orange)' : 'var(--text-muted)'}; text-align: right;">
+                    ${isSelected ? '✓ 현재 선택됨' : '선택하기'}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          <!-- 선택된 유형의 본문 전개 프로세스 1줄 요약 바 -->
+          <div class="flex-between mt-12" style="padding: 9px 14px; background-color: var(--bg-subtle); border: var(--border-thin); border-radius: var(--radius-general); flex-wrap: wrap; gap: 8px;">
+            <div style="font-size: 12.5px; color: var(--text-secondary);">
+              <strong style="color: var(--mk-orange); margin-right: 6px;">[${escapeHtml(selectedTypeInfo.shortName)}] 본문 구성 흐름:</strong>
+              ${escapeHtml(selectedTypeInfo.structure)}
+            </div>
+            <span style="font-size: 11.5px; color: var(--text-muted);">
+              소재를 아직 못 정하셨다면 아래 탭에서 트렌드 키워드나 캘린더 일정을 클릭해 바로 시작하세요 ↓
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. 하단 통합 소재 발굴 & 작업 보관함 카드 (3개 탭으로 분리해 한 번에 하나씩만 깔끔하게 표시!) -->
+      <div class="card" style="padding: 0; overflow: hidden;">
+        <div class="home-main-tab-bar">
+          <div class="home-main-tabs">
+            <button type="button" class="home-main-tab-btn ${state.homeDiscoveryTab === 'trends' ? 'active' : ''}" data-home-main-tab="trends">
+              🔥 실시간 트렌드 추천 (10선)
+            </button>
+            <button type="button" class="home-main-tab-btn ${state.homeDiscoveryTab === 'calendar' ? 'active' : ''}" data-home-main-tab="calendar">
+              📅 2026 월별 마케팅 캘린더
+            </button>
+            <button type="button" class="home-main-tab-btn ${state.homeDiscoveryTab === 'works' ? 'active' : ''}" data-home-main-tab="works">
+              📂 최근 작업한 기사 (${state.works.length})
+            </button>
+          </div>
+
+          <div class="flex-row" style="padding: 8px 0;">
+            ${state.homeDiscoveryTab === 'trends' ? `
+              <button type="button" class="text-action" id="refreshTrendRadarBtn">
+                ${state.isLoadingTrends ? '업데이트 중...' : '↻ 실시간 트렌드 새로고침'}
+              </button>
+            ` : state.homeDiscoveryTab === 'calendar' ? `
+              <button type="button" class="btn btn-sm btn-outline-orange" id="openIbossPopupBtn">
+                🔗 아이보스 마케팅 캘린더 팝업 ↗
+              </button>
+              <button type="button" class="btn btn-sm ${state.showExternalCalendarEmbed ? 'btn-primary' : ''}" id="toggleExternalCalEmbedBtn">
+                ${state.showExternalCalendarEmbed ? '📄 나스미디어 2026 원본 PDF 닫기 ▲' : '📄 나스미디어 2026 원본 PDF 보기 ▼'}
+              </button>
+            ` : `
+              <span class="text-muted">모든 변경사항은 자동 저장됩니다</span>
+            `}
+          </div>
+        </div>
+
+        <div style="padding: 22px 26px;">
+          ${state.homeDiscoveryTab === 'trends' ? `
+            <!-- [탭 1: 실시간 트렌드 키워드 추천 10선] -->
+            <div class="flex-between mb-8">
+              <p style="font-size: 13px; color: var(--text-secondary);">
+                원하는 트렌드 키워드를 클릭하면 가장 알맞은 콘텐츠 유형(01~05)과 카테고리로 <strong>즉시 기사 초안이 생성</strong>됩니다.
+              </p>
+            </div>
+
+            <div class="trend-clean-tab-bar">
+              <button type="button" class="trend-clean-tab ${state.trendTab === 'shortform' ? 'active' : ''}" data-trend-tab="shortform">
+                유튜브 쇼츠 · 릴스 화제 (${(state.trendRadar.shortFormTrends || []).length})
+              </button>
+              <button type="button" class="trend-clean-tab ${state.trendTab === 'newsletter' ? 'active' : ''}" data-trend-tab="newsletter">
+                트렌드 뉴스레터 · MZ 키워드 (${state.trendRadar.newsletterTrends.length})
+              </button>
+              <button type="button" class="trend-clean-tab ${state.trendTab === 'portal' ? 'active' : ''}" data-trend-tab="portal">
+                네이버 · 포털 유통 화제 (${state.trendRadar.portalRetailTrends.length})
+              </button>
+              <button type="button" class="trend-clean-tab ${state.trendTab === 'google' ? 'active' : ''}" data-trend-tab="google">
+                구글 트렌드 급상승 (${state.trendRadar.googleTrends.length})
+              </button>
+            </div>
+
+            <div class="trend-clean-grid">
+              ${activeTrendList.map((item, idx) => {
+                const matchedTypeId = detectBestContentType(item.keyword, '', item.desc || '', state.trendTab === 'shortform' || state.trendTab === 'newsletter' ? 3 : 4);
+                const matchedCat = recommendMkPickCategory(item.keyword, matchedTypeId, '').recommendedCategory;
+                return `
+                  <div class="trend-clean-row" data-use-trend-kw="${escapeHtml(item.keyword)}" data-use-trend-type="${matchedTypeId}">
+                    <div style="min-width: 0; flex: 1;">
+                      <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 2px;">
+                        <span style="font-size: 12px; font-weight: 800; color: var(--mk-orange); width: 18px;">${idx + 1}</span>
+                        <strong style="font-size: 14px; color: var(--text-primary);">${escapeHtml(item.keyword)}</strong>
+                        <span style="font-size: 11px; font-weight: 700; color: var(--mk-orange); background-color: var(--mk-orange-light); padding: 1px 6px; border-radius: 4px;">
+                          유형 0${matchedTypeId} · ${escapeHtml(matchedCat)}
+                        </span>
+                      </div>
+                      <div style="font-size: 12.5px; color: var(--text-secondary); padding-left: 24px;">
+                        ${escapeHtml(item.desc)}
+                      </div>
+                    </div>
+                    <span style="font-size: 12px; font-weight: 800; color: var(--mk-orange); white-space: nowrap; flex-shrink: 0;">
+                      초안 생성 →
+                    </span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+
+          ` : state.homeDiscoveryTab === 'calendar' ? `
+            <!-- [탭 2: 2026 월별 마케팅 이슈 캘린더] -->
+            <div style="display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 12px; border-bottom: var(--border-thin); margin-bottom: 12px;">
+              ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => {
+                const isCurMonth = state.calendarMonth === m;
+                return `
+                  <button
+                    type="button"
+                    data-cal-month="${m}"
+                    style="padding: 6px 13px; border-radius: var(--radius-general); border: ${isCurMonth ? '1px solid var(--mk-orange)' : 'var(--border-thin)'}; background-color: ${isCurMonth ? 'var(--mk-orange)' : 'var(--white)'}; color: ${isCurMonth ? '#FFFFFF' : 'var(--text-secondary)'}; font-size: 13px; font-weight: ${isCurMonth ? '800' : '600'}; cursor: pointer; font-family: inherit;"
+                  >
+                    ${m}월
+                  </button>
+                `;
+              }).join('')}
+            </div>
+
+            <!-- 선택된 월의 핵심 테마 및 업종별 큐레이션 요약 -->
+            <div class="flex-between mb-12" style="padding: 10px 14px; background-color: var(--bg-subtle); border-radius: var(--radius-general); flex-wrap: wrap; gap: 8px;">
+              <div>
+                <span style="font-size: 12.5px; font-weight: 800; color: var(--mk-orange); margin-right: 8px;">2026년 ${calData.month}월 핵심 테마</span>
+                <strong style="font-size: 13.5px; color: var(--text-primary);">${escapeHtml(calData.theme)}</strong>
+              </div>
+              <div class="flex-row" style="gap: 6px;">
+                ${(calData.keyTags || []).map(tag => `
+                  <span style="font-size: 11.5px; color: var(--text-secondary); background-color: var(--white); border: var(--border-thin); padding: 2px 8px; border-radius: 99px;">
+                    #${escapeHtml(tag)}
+                  </span>
+                `).join('')}
+              </div>
+            </div>
+
+            ${calData.curation ? `
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px;">
+                <div style="padding: 9px 12px; border: var(--border-thin); border-radius: var(--radius-general); background-color: var(--white);">
+                  <div style="font-size: 11px; font-weight: 800; color: var(--mk-orange); margin-bottom: 2px;">🍽️ EAT · 식음료/외식</div>
+                  <div style="font-size: 12px; color: var(--text-primary); font-weight: 600;">${escapeHtml(calData.curation.eat)}</div>
+                </div>
+                <div style="padding: 9px 12px; border: var(--border-thin); border-radius: var(--radius-general); background-color: var(--white);">
+                  <div style="font-size: 11px; font-weight: 800; color: var(--mk-orange); margin-bottom: 2px;">🛍️ BUY · 가전/패션/쇼핑</div>
+                  <div style="font-size: 12px; color: var(--text-primary); font-weight: 600;">${escapeHtml(calData.curation.buy)}</div>
+                </div>
+                <div style="padding: 9px 12px; border: var(--border-thin); border-radius: var(--radius-general); background-color: var(--white);">
+                  <div style="font-size: 11px; font-weight: 800; color: var(--mk-orange); margin-bottom: 2px;">📚 DO · 교육/생활서비스</div>
+                  <div style="font-size: 12px; color: var(--text-primary); font-weight: 600;">${escapeHtml(calData.curation.do)}</div>
+                </div>
+                <div style="padding: 9px 12px; border: var(--border-thin); border-radius: var(--radius-general); background-color: var(--white);">
+                  <div style="font-size: 11px; font-weight: 800; color: var(--mk-orange); margin-bottom: 2px;">🎬 PLAY · 여가/레저/콘텐츠</div>
+                  <div style="font-size: 12px; color: var(--text-primary); font-weight: 600;">${escapeHtml(calData.curation.play)}</div>
+                </div>
+              </div>
+            ` : ''}
+
+            <div class="trend-clean-grid">
+              ${(calData.events || []).map(ev => `
+                <div class="trend-clean-row" data-use-cal-kw="${escapeHtml(ev.keyword)}" data-use-cal-type="${ev.typeId}">
+                  <div style="min-width: 0; flex: 1;">
+                    <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 3px;">
+                      <span style="font-size: 12px; font-weight: 800; color: var(--mk-orange);">${escapeHtml(ev.date)}</span>
+                      <strong style="font-size: 14px; color: var(--text-primary);">${escapeHtml(ev.name)}</strong>
+                      <span style="font-size: 11px; font-weight: 700; color: var(--mk-orange); background-color: var(--mk-orange-light); padding: 1px 6px; border-radius: 4px;">
+                        유형 0${ev.typeId} · ${escapeHtml(ev.category)}
+                      </span>
+                    </div>
+                    <div style="font-size: 12.5px; color: var(--text-secondary);">
+                      ${escapeHtml(ev.desc)}
+                    </div>
+                  </div>
+                  <span style="font-size: 12px; font-weight: 800; color: var(--mk-orange); white-space: nowrap; flex-shrink: 0;">
+                    초안 생성 →
+                  </span>
+                </div>
+              `).join('')}
+            </div>
+
+            ${state.showExternalCalendarEmbed ? `
+              <div style="margin-top: 16px; padding-top: 16px; border-top: var(--border-thin);">
+                <div class="flex-between mb-8">
+                  <strong style="font-size: 13.5px; font-weight: 800;">📄 KT 나스미디어 2026 마케팅 이슈 캘린더 원본 PDF</strong>
+                  <a href="./nasmedia-2026-calendar.pdf" target="_blank" rel="noopener noreferrer" class="text-action-orange">
+                    새 탭에서 크게 열기 / 다운로드 ↗
+                  </a>
+                </div>
+                <div style="border: var(--border-thin); border-radius: var(--radius-general); overflow: hidden; background-color: var(--bg-subtle);">
+                  <iframe
+                    src="./nasmedia-2026-calendar.pdf#view=FitH"
+                    style="width: 100%; height: 600px; border: none; background-color: #FFFFFF; display: block;"
+                    title="KT 나스미디어 2026 마케팅 이슈 캘린더 PDF"
+                  ></iframe>
+                </div>
+              </div>
+            ` : ''}
+
+          ` : `
+            <!-- [탭 3: 최근 작업한 기사 보관함] -->
+            ${state.works.length === 0 ? `
+              <div style="padding: 32px 0; text-align: center; color: var(--text-muted);">
+                아직 저장된 기사가 없습니다. 위에서 키워드를 입력하거나 실시간 트렌드를 클릭해 첫 기사를 만들어 보세요.
+              </div>
+            ` : `
+              <div>
+                ${state.works.map(w => {
+                  const tInfo = CONTENT_TYPES[w.typeId] || CONTENT_TYPES[2];
+                  const wCat = w.summaryBlocks?.mkCategory || tInfo.defaultCategory || '산업 Q&A';
+                  return `
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 8px; border-bottom: var(--border-thin);">
+                      <div style="flex: 1; min-width: 0; cursor: pointer;" data-open-work="${w.id}">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 2px;">
+                          <span style="font-size: 12px; font-weight: 700; color: var(--mk-orange);">${escapeHtml(tInfo.shortName)}</span>
+                          <span style="font-size: 11.5px; font-weight: 700; color: var(--text-secondary);">[${escapeHtml(wCat)}]</span>
+                          <span class="text-muted">· 키워드: ${escapeHtml(w.keyword)} · ${escapeHtml(w.updatedAt)}</span>
+                        </div>
+                        <div style="font-weight: 700; font-size: 14px; color: var(--text-primary);">
+                          ${escapeHtml(w.title)}
+                        </div>
+                      </div>
+                      <div class="flex-row">
+                        <span style="font-size: 13px; font-weight: 800; color: var(--mk-orange); cursor: pointer; margin-right: 8px;" data-open-work="${w.id}">
+                          이어서 편집 →
+                        </span>
+                        <button class="btn btn-sm" data-del-work="${w.id}" style="padding: 3px 8px; font-size: 11.5px; color: var(--text-muted);">삭제</button>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            `}
+          `}
+        </div>
+      </div>
+    `;
+
+    function syncHomeInputs() {
+      hi.keyword = document.getElementById('homeKeywordInput')?.value || '';
+      hi.company = document.getElementById('homeCompanyInput')?.value || '';
+      if (state.showRawPasteInput) {
+        hi.url = document.getElementById('homeUrlInput')?.value || '';
+        hi.rawText = document.getElementById('homeRawTextInput')?.value || '';
+      }
+    }
+
+    document.getElementById('homeKeywordInput')?.addEventListener('input', e => {
+      hi.keyword = e.target.value;
+      const autoDetected = detectBestContentType(hi.keyword, hi.company, hi.rawText, hi.typeId);
+      if (hi.keyword.trim().length >= 2 && hi.typeId !== autoDetected) {
+        hi.typeId = autoDetected;
+      }
+    });
+
+    document.getElementById('homeKeywordInput')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        syncHomeInputs();
+        if (!hi.keyword.trim()) {
+          showToast('트렌드 키워드나 주제를 입력해 주세요!');
+          return;
+        }
+        startWorkWithKeyword(hi.keyword, hi.typeId, hi.company, false);
+      }
+    });
+
+    document.getElementById('toggleRawPasteBtn')?.addEventListener('click', () => {
+      syncHomeInputs();
+      state.showRawPasteInput = !state.showRawPasteInput;
+      render(true);
+    });
+
+    // 5대 콘텐츠 유형 카드 클릭 시 유형 선택
+    root.querySelectorAll('[data-select-home-type]').forEach(card => {
+      card.addEventListener('click', () => {
+        syncHomeInputs();
+        const nextType = Number(card.getAttribute('data-select-home-type'));
+        hi.typeId = nextType;
+        render(true);
+      });
+    });
+
+    // 하단 3개 메인 탭 전환 (🔥 실시간 트렌드 / 📅 2026 마케팅 캘린더 / 📂 최근 작업 기사)
+    root.querySelectorAll('[data-home-main-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        syncHomeInputs();
+        state.homeDiscoveryTab = btn.getAttribute('data-home-main-tab');
+        render(true);
+      });
+    });
+
+    // 트렌드 레이더 서브 탭 전환
+    root.querySelectorAll('[data-trend-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        syncHomeInputs();
+        state.trendTab = btn.getAttribute('data-trend-tab');
+        render(true);
+      });
+    });
+
+    document.getElementById('refreshTrendRadarBtn')?.addEventListener('click', async () => {
+      syncHomeInputs();
+      await loadTrends();
+      showToast('구글 트렌드 및 포털 실시간 화제 키워드 10선을 최신 상태로 업데이트했습니다.');
+      render(true);
+    });
+
+    // 실시간 트렌드 키워드 클릭 시 최적 유형(1~5)으로 즉시 초안 생성
+    root.querySelectorAll('[data-use-trend-kw]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const kw = btn.getAttribute('data-use-trend-kw');
+        const matchedType = Number(btn.getAttribute('data-use-trend-type')) || detectBestContentType(kw, hi.company, '', 4);
+        syncHomeInputs();
+        hi.keyword = kw;
+        hi.typeId = matchedType;
+        startWorkWithKeyword(kw, matchedType, hi.company, true);
+      });
+    });
+
+    // 월별 마케팅 캘린더 월 변경
+    root.querySelectorAll('[data-cal-month]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        syncHomeInputs();
+        state.calendarMonth = Number(btn.getAttribute('data-cal-month'));
+        render(true);
+      });
+    });
+
+    // 월별 마케팅 캘린더 이벤트 클릭 시 해당 기념일/시즌 유형으로 즉시 초안 생성
+    root.querySelectorAll('[data-use-cal-kw]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const kw = btn.getAttribute('data-use-cal-kw');
+        const calType = Number(btn.getAttribute('data-use-cal-type')) || 2;
+        syncHomeInputs();
+        hi.keyword = kw;
+        hi.typeId = calType;
+        startWorkWithKeyword(kw, calType, hi.company, false);
+      });
+    });
+
+    // 나스미디어 2026 PDF 임베드 토글
+    document.getElementById('toggleExternalCalEmbedBtn')?.addEventListener('click', () => {
+      syncHomeInputs();
+      state.showExternalCalendarEmbed = !state.showExternalCalendarEmbed;
+      render(true);
+    });
+
+    function openIbossMarketingCalendarWindow() {
+      const ibossUrl = 'https://www.i-boss.co.kr/ab-marketing_calendar?ref=3208-1620';
+      window.open(
+        ibossUrl,
+        'ibossMarketingCalendarWindow',
+        'width=1260,height=880,left=80,top=60,resizable=yes,scrollbars=yes'
+      );
+      showToast('아이보스(i-boss) 공식 마케팅 캘린더 전용 창을 열었습니다.');
+    }
+
+    document.getElementById('openIbossPopupBtn')?.addEventListener('click', openIbossMarketingCalendarWindow);
+
+    // 직접 입력한 키워드로 초안 생성
+    document.getElementById('homeStartDynamicBtn')?.addEventListener('click', async () => {
+      syncHomeInputs();
+      if (!hi.keyword.trim()) {
+        showToast('트렌드 키워드나 주제를 입력해 주세요! (예: 한남동 팔란티어 팝업 품절)');
+        document.getElementById('homeKeywordInput')?.focus();
+        return;
+      }
+      startWorkWithKeyword(hi.keyword, hi.typeId, hi.company, false);
+    });
+
+    root.querySelectorAll('[data-open-work]').forEach(el => {
+      el.addEventListener('click', () => {
+        const id = el.getAttribute('data-open-work');
+        const found = state.works.find(w => w.id === id);
+        if (found) {
+          state.currentWork = found;
+          state.screen = 'editor';
+          render(false);
+        }
+      });
+    });
+
+    root.querySelectorAll('[data-del-work]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-del-work');
+        await apiFetch(`/api/works/${id}`, { method: 'DELETE' });
+        state.works = state.works.filter(w => w.id !== id);
+        if (state.currentWork?.id === id) state.currentWork = null;
+        showToast('선택한 기사가 삭제되었습니다.');
+        render(true);
+      });
+    });
+  }
+
+  // ==========================================================================
+  // 화면 2: 좌·우 2단 통합 편집 화면 (UI/UX 전면 개편)
+  //   - 상단 바: 스크롤 시 겹침 방지 + [✏️ 구조별 편집] / [👁️ 실제 기사 미리보기] 전환 + 실시간 글자수/팩트체크 배지
+  //   - 왼쪽 패널: 이중 스크롤바 제거 + 3개 목적별 탭 ([📝 취재·메모] / [✅ GEO·팩트점검] / [🧭 목차·흐름])
+  //   - 오른쪽 패널: 기사 구성 8단계(STEP 01~08)를 직관적인 배지로 시각화 + 입력창 높이 자동 확장 + 단락 순서 이동 & 매경 문체 자동 다듬기
+  // ==========================================================================
+  function renderEditorScreen(root) {
+    const w = state.currentWork;
+    if (!w) {
+      state.screen = 'home';
+      return render();
+    }
+
+    const tInfo = CONTENT_TYPES[w.typeId] || CONTENT_TYPES[2];
+    const sb = w.summaryBlocks || {};
+    const fullText = buildPlainTextArticle(w);
+    const unverifiedCount = (w.factChecks || []).filter(f => f.status === '미처리').length;
+    const geoEval = evaluateGeoChecklist(w);
+    const isPreview = state.editorViewMode === 'preview';
+
+    // 편집 화면 왼쪽에서도 바로 눌러 쓸 수 있는 인기 트렌드 태그 모음 (8개)
+    const quickTrendTags = [
+      ...(state.trendRadar.shortFormTrends || []).slice(0, 3).map(t => t.keyword),
+      ...(state.trendRadar.newsletterTrends || []).slice(0, 3).map(t => t.keyword),
+      ...(state.trendRadar.portalRetailTrends || []).slice(0, 2).map(t => t.keyword),
+      ...(state.trendRadar.googleTrends || []).slice(0, 2).map(t => t.keyword)
+    ].filter((v, i, arr) => v && arr.indexOf(v) === i).slice(0, 8);
+
+    // 유형별 단락 역할 안내 라벨 (5대 콘텐츠 유형의 흐름을 각 단락에 직관적으로 표시)
+    const sectionRoleLabels = {
+      1: ['도입 · 소비자 불편과 의문 제기', '원인 · 업계 관행과 구조적 배경', '비교 · 대안 및 업계 대응 분석', '전망 · 소비자 선택 기준 제시'],
+      2: ['도입 · 기념일 유래와 사회적 의미', '트렌드 · 올해 시장·소비자 변화', '브랜드별 소개 · 참여 기업 캠페인·제품 총정리', '시사점 · 캠페인 참여 방법과 기대 효과'],
+      3: ['도입 · SNS·유튜브 화제 현상 포착', '분석 · 검색량·매출 급증과 인기 요인', '대응 · 유통·식품업계 신제품·마케팅 경쟁', '전망 · 유행 지속 가능성과 소비 팁'],
+      4: ['도입 · 현장 열기·신제품 핵심 화두', '차별점 · 핵심 기술·스펙·가격 경쟁력', '검증 · 소비자 반응 및 경쟁사 비교', '전망 · 시장 파급력과 향후 일정'],
+      5: ['도입 · 고정관념을 깬 브랜드 화두', '위기 · 당시 시장 한계와 도전 과제', '전환점 · 역발상 전략과 핵심 실행 비결', '성과 · 매출·점유율 데이터와 업계 교훈']
+    }[w.typeId] || ['도입 · 독자 공감 질문', '배경 · 핵심 원인 분석', '전개 · 주요 사례와 데이터', '결론 · 향후 전망과 시사점'];
+
+    root.innerHTML = `
+      <!-- 상단 고정 액션 바: 스크롤 시에도 왼쪽·오른쪽 본문을 가리지 않도록 정밀 고정 -->
+      <div class="editor-sticky-bar">
+        <div class="flex-row" style="gap: 10px;">
+          <button type="button" class="btn btn-sm" id="backToHomeBtn" style="font-weight: 700;">← 홈 · 소재 선택</button>
+          <select class="select" id="editorTypeSelect" style="width: auto; padding: 5px 10px; font-weight: 700; background-color: var(--bg-subtle);">
+            ${Object.values(CONTENT_TYPES).map(t => `
+              <option value="${t.id}" ${w.typeId === t.id ? 'selected' : ''}>${escapeHtml(t.shortName)}</option>
+            `).join('')}
+          </select>
+          <div class="mode-switch-group" title="구조별 편집 화면과 실제 발행 기사 미리보기를 전환합니다">
+            <button type="button" class="mode-switch-btn ${!isPreview ? 'active' : ''}" data-editor-mode="edit">✏️ 구조별 편집</button>
+            <button type="button" class="mode-switch-btn ${isPreview ? 'active' : ''}" data-editor-mode="preview">👁️ 실제 기사 미리보기</button>
+          </div>
+          <button type="button" class="text-action" id="clearToBlankBtn" title="빈 양식으로 비우기">빈 양식</button>
+          <button type="button" class="text-action" id="restoreExampleBtn" title="초기 예시 복원">↺ 초안 복원</button>
+        </div>
+
+        <div class="flex-row" style="gap: 12px;">
+          <span id="liveCharCountBadge" class="badge" style="font-weight: 700;">
+            공백 포함 ${fullText.length.toLocaleString()}자
+          </span>
+          <button
+            type="button"
+            id="liveFcCountBadge"
+            class="badge ${unverifiedCount > 0 ? 'badge-amber' : 'badge-green'}"
+            style="cursor: pointer; font-weight: 800;"
+            title="클릭하면 왼쪽 [점검·팩트] 탭에서 수치·날짜 팩트체크 문장을 바로 확인합니다"
+          >
+            ${unverifiedCount > 0 ? `🖍️ 팩트 확인 필요 ${unverifiedCount}건` : '✓ 팩트 확인 완료'}
+          </button>
+          <button class="btn btn-primary" id="copyFullArticleTopBtn" style="padding: 8px 16px; font-weight: 800;">
+            📋 CMS 붙여넣기용 전체 복사
+          </button>
+        </div>
+      </div>
+
+      <!-- 좌·우 2단 분할 레이아웃 -->
+      <div class="studio-split-layout">
+
+        <!-- [왼쪽 보조 패널] 이중 스크롤바를 없애고 목적별 3개 탭(취재·메모 / 점검·팩트 / 목차·흐름)으로 깔끔하게 정리 -->
+        <aside class="left-panel-sticky">
+          <div class="card" style="padding: 0; margin-bottom: 0; overflow: hidden;">
+            <!-- 왼쪽 패널 3탭 헤더 -->
+            <div class="left-tab-bar">
+              <button type="button" class="left-tab-btn ${state.leftPanelTab === 'memo' ? 'active' : ''}" data-left-tab="memo">
+                📝 취재·메모 (${(w.researchItems || []).length})
+              </button>
+              <button type="button" class="left-tab-btn ${state.leftPanelTab === 'check' ? 'active' : ''}" data-left-tab="check">
+                ✅ 점검·팩트 (<span id="leftCheckTabBadge">${geoEval.passedCount}/${geoEval.total}</span>)
+              </button>
+              <button type="button" class="left-tab-btn ${state.leftPanelTab === 'outline' ? 'active' : ''}" data-left-tab="outline">
+                🧭 목차·흐름
+              </button>
+            </div>
+
+            <div style="padding: 18px 20px;">
+              ${state.leftPanelTab === 'memo' ? `
+                <!-- [탭 1: 취재·메모] 키워드 재검색 + 매경 문체 메모장 -->
+                <div style="margin-bottom: 16px; padding-bottom: 14px; border-bottom: var(--border-thin);">
+                  <div class="flex-between mb-6">
+                    <strong style="font-size: 13px; font-weight: 800;">🔍 취재 키워드 · 뉴스 팩트 수집</strong>
+                    <span class="text-muted">실시간 검색 연동</span>
+                  </div>
+                  <div class="flex-row mb-8" style="gap: 6px;">
+                    <input type="text" class="input" id="leftSearchKwInput" value="${escapeHtml(w.keyword)}" placeholder="키워드 입력" style="flex: 1; padding: 7px 10px;" />
+                    <input type="text" class="input" id="leftSearchCompInput" value="${escapeHtml(w.inputCompany || '')}" placeholder="기업명(선택)" style="width: 92px; padding: 7px 10px;" />
+                  </div>
+                  <div class="flex-between mb-8">
+                    <button type="button" class="btn btn-sm" id="leftFetchMemoOnlyBtn">+ 팩트만 메모장에 추가</button>
+                    <button type="button" class="btn btn-sm btn-outline-orange" id="leftRebuildDraftBtn">이 키워드로 기사 새로 쓰기 →</button>
+                  </div>
+                  <div style="font-size: 11.5px; color: var(--text-muted); line-height: 1.65;">
+                    <span style="font-weight: 700; color: var(--text-secondary); margin-right: 4px;">인기 키워드 빠른 전환:</span>
+                    ${quickTrendTags.map(tag => `
+                      <button type="button" class="text-action" style="font-size: 11.5px; color: var(--text-secondary); margin-right: 4px;" data-quick-trend="${escapeHtml(tag)}">
+                        #${escapeHtml(tag)}
+                      </button>
+                    `).join('')}
+                  </div>
+                </div>
+
+                <div>
+                  <div class="flex-between mb-6">
+                    <strong style="font-size: 13.5px; font-weight: 800;">📌 취재 팩트 메모장 (매경 문체)</strong>
+                    <span style="font-size: 12px; color: var(--mk-orange); font-weight: 800;">총 ${(w.researchItems || []).length}건</span>
+                  </div>
+                  <p class="text-muted mb-8" style="line-height: 1.45;">
+                    보도자료·외부 기사 문장을 붙여넣으면 타 언론사 표현을 배제하고 <strong>매경 Pick 경어체("~합니다")</strong>로 자동 다듬어 원하는 단락에 넣어줍니다.
+                  </p>
+
+                  <div class="mb-12" style="padding: 10px; background-color: var(--bg-subtle); border: var(--border-thin); border-radius: var(--radius-general);">
+                    <textarea class="textarea" id="memoFactInput" placeholder="팩트나 보도자료 문장을 붙여넣으세요..." style="min-height: 52px; margin-bottom: 6px; padding: 7px 10px; font-size: 12.5px; background-color: var(--white);"></textarea>
+                    <div class="flex-between" style="gap: 6px;">
+                      <input type="url" class="input" id="memoUrlInput" placeholder="출처 URL (선택)" style="flex: 1; padding: 5px 8px; font-size: 12px; background-color: var(--white);" />
+                      <button type="button" class="btn btn-sm btn-primary" id="addMemoBtn">+ 매경 문체로 추가</button>
+                    </div>
+                  </div>
+
+                  <div>
+                    ${(w.researchItems || []).map((item, idx) => {
+                      const linkedSource = (w.sources || []).find(s => (item.sourceIds || []).includes(s.id));
+                      return `
+                        <div class="clean-list-row">
+                          <div style="font-size: 12.5px; color: var(--text-primary); line-height: 1.55; margin-bottom: 6px;">
+                            ${escapeHtml(item.fact)}
+                          </div>
+                          <div class="flex-between" style="flex-wrap: wrap; gap: 6px;">
+                            <div class="flex-row" style="gap: 6px;">
+                              <span style="font-size: 11px; font-weight: 700; color: var(--mk-orange); background-color: var(--mk-orange-light); padding: 1px 6px; border-radius: 4px;">
+                                ${escapeHtml(item.category || `팩트 ${idx + 1}`)}
+                              </span>
+                              ${linkedSource ? `
+                                <a href="${escapeHtml(linkedSource.url)}" target="_blank" rel="noopener noreferrer" style="font-size: 11px; color: var(--text-secondary); text-decoration: underline;">
+                                  출처 원문 ↗
+                                </a>
+                              ` : ''}
+                            </div>
+                            <div class="flex-row" style="gap: 6px;">
+                              <select id="targetSecForMemo-${item.id}" style="border: var(--border-thin); border-radius: 4px; padding: 2px 6px; background: var(--white); font-size: 11.5px; color: var(--text-secondary); cursor: pointer;">
+                                ${(w.draftSections || []).map((sec, sIdx) => `
+                                  <option value="${sec.id}" ${sIdx === (w.draftSections.length > 1 ? 1 : 0) ? 'selected' : ''}>단락 0${sIdx + 1}에 넣기</option>
+                                `).join('')}
+                                <option value="ai-summary">AI 3줄 요약에 넣기</option>
+                              </select>
+                              <button type="button" class="text-action-orange" data-insert-memo="${item.id}" style="font-size: 11.5px;">본문 반영 →</button>
+                              <button type="button" class="text-action" data-del-memo="${item.id}" style="font-size: 11px; color: var(--text-muted);">삭제</button>
+                            </div>
+                          </div>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              ` : state.leftPanelTab === 'check' ? `
+                <!-- [탭 2: 점검·팩트] GEO 7대 체크리스트 (클릭 시 우측 영역 점프) + 수치·날짜 형광펜 팩트체크 -->
+                <div style="margin-bottom: 18px; padding-bottom: 14px; border-bottom: var(--border-thin);">
+                  <div class="flex-between mb-6">
+                    <strong style="font-size: 13.5px; font-weight: 800;">✅ GEO 최적화 7대 체크리스트</strong>
+                    <span id="geoChecklistScoreBadge" style="font-size: 12.5px; font-weight: 800; color: ${geoEval.passedCount === geoEval.total ? 'var(--status-green)' : 'var(--mk-orange)'};">
+                      ${geoEval.passedCount}/${geoEval.total} 충족
+                    </span>
+                  </div>
+                  <p class="text-muted mb-8">
+                    항목을 클릭하면 오른쪽 기사의 해당 위치로 바로 이동해 보완할 수 있습니다.
+                  </p>
+                  <div id="geoChecklistContainer">
+                    ${renderGeoChecklistItemsHtml(geoEval.details)}
+                  </div>
+                </div>
+
+                <div>
+                  <div class="flex-between mb-6">
+                    <strong style="font-size: 13.5px; font-weight: 800;">
+                      🖍️ 수치·날짜 팩트체크 (${unverifiedCount > 0 ? `미확인 ${unverifiedCount}건` : '모두 확인됨'})
+                    </strong>
+                    ${unverifiedCount > 0 ? `
+                      <button type="button" class="text-action-orange" id="verifyAllFactsBtn">일괄 확인 완료 ✓</button>
+                    ` : ''}
+                  </div>
+                  <p class="text-muted mb-8">
+                    본문 속 숫자·일정·혜택이 포함된 문장입니다. 팩트 확인 후 문장을 클릭해 체크하세요.
+                  </p>
+                  ${(w.factChecks || []).length === 0 ? `
+                    <div class="text-muted" style="padding: 12px 0;">추출된 수치·날짜 팩트체크 문장이 없습니다.</div>
+                  ` : `
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                      ${(w.factChecks || []).map(fc => {
+                        const isVerified = fc.status !== '미처리';
+                        return `
+                          <div
+                            data-toggle-fc="${fc.id}"
+                            style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: var(--radius-general); border: var(--border-thin); background-color: ${isVerified ? 'var(--status-green-bg)' : '#FFF9DB'}; cursor: pointer; font-size: 12px; line-height: 1.5;"
+                          >
+                            <span style="color: var(--text-primary);">
+                              <strong style="color: ${isVerified ? 'var(--status-green)' : 'var(--status-amber)'}; margin-right: 4px;">
+                                ${isVerified ? '✓ 확인됨' : '• 확인 필요'}
+                              </strong>
+                              ${escapeHtml(fc.sentence)}
+                            </span>
+                            <span style="font-size: 11px; font-weight: 700; color: ${isVerified ? 'var(--text-muted)' : 'var(--mk-orange)'}; white-space: nowrap; flex-shrink: 0;">
+                              ${isVerified ? '취소' : '확인 ✓'}
+                            </span>
+                          </div>
+                        `;
+                      }).join('')}
+                    </div>
+                  `}
+                </div>
+              ` : `
+                <!-- [탭 3: 목차·흐름] 현재 기사 8단계 목차 리모컨 & 유형별 작성 가이드 -->
+                <div style="margin-bottom: 16px; padding: 12px; background-color: var(--mk-orange-light); border: 0.5px solid var(--mk-orange-border); border-radius: var(--radius-general);">
+                  <div style="font-size: 11.5px; font-weight: 800; color: var(--mk-orange); margin-bottom: 3px;">
+                    현재 적용 템플릿 · ${escapeHtml(tInfo.shortName)}
+                  </div>
+                  <div style="font-size: 12.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">
+                    ${escapeHtml(tInfo.description)}
+                  </div>
+                  <div style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.5;">
+                    흐름: ${escapeHtml(tInfo.flowSummary || '')}
+                  </div>
+                </div>
+
+                <div class="mb-8">
+                  <strong style="font-size: 13px; font-weight: 800;">🧭 기사 구성 블록 빠른 이동 (클릭)</strong>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <button type="button" class="headline-pick-row" data-jump-block="block-step-1" style="text-align: left; border: var(--border-thin);">
+                    <span style="font-size: 12.5px; font-weight: 700;">STEP 01 · 카테고리 분류 (${escapeHtml(sb.mkCategory || '산업 Q&A')})</span>
+                    <span class="text-muted">이동 →</span>
+                  </button>
+                  <button type="button" class="headline-pick-row" data-jump-block="block-step-2" style="text-align: left; border: var(--border-thin);">
+                    <span style="font-size: 12.5px; font-weight: 700;">STEP 02 · 기사 헤드라인 & 추천 제목 5선</span>
+                    <span class="text-muted">이동 →</span>
+                  </button>
+                  <button type="button" class="headline-pick-row" data-jump-block="block-step-3" style="text-align: left; border: var(--border-thin);">
+                    <span style="font-size: 12.5px; font-weight: 700;">STEP 03 · AI 팩트 체크 3줄 요약</span>
+                    <span class="text-muted">이동 →</span>
+                  </button>
+                  <button type="button" class="headline-pick-row" data-jump-block="block-step-4" style="text-align: left; border: var(--border-thin);">
+                    <span style="font-size: 12.5px; font-weight: 700;">STEP 04 · 기사 리드 부제 (Subtitle)</span>
+                    <span class="text-muted">이동 →</span>
+                  </button>
+                  ${(w.draftSections || []).map((sec, sIdx) => `
+                    <button type="button" class="headline-pick-row" data-jump-block="secWrap-${sec.id}" style="text-align: left; border: var(--border-thin); padding-left: 14px;">
+                      <span style="font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        └ 단락 0${sIdx + 1}: ${escapeHtml(sec.title)}
+                      </span>
+                      <span class="text-muted">이동 →</span>
+                    </button>
+                  `).join('')}
+                  <button type="button" class="headline-pick-row" data-jump-block="block-step-6" style="text-align: left; border: var(--border-thin);">
+                    <span style="font-size: 12.5px; font-weight: 700;">STEP 06 · 핵심 비교 요약표 (${(sb.summaryTable?.rows || []).length}행)</span>
+                    <span class="text-muted">이동 →</span>
+                  </button>
+                  <button type="button" class="headline-pick-row" data-jump-block="block-step-7" style="text-align: left; border: var(--border-thin);">
+                    <span style="font-size: 12.5px; font-weight: 700;">STEP 07 · 자연어 FAQ (${(sb.faqs || []).length}문항) & 팬아웃</span>
+                    <span class="text-muted">이동 →</span>
+                  </button>
+                  <button type="button" class="headline-pick-row" data-jump-block="block-step-8" style="text-align: left; border: var(--border-thin);">
+                    <span style="font-size: 12.5px; font-weight: 700;">STEP 08 · 마무리 한 줄 요약 & 출처 고지</span>
+                    <span class="text-muted">이동 →</span>
+                  </button>
+                </div>
+              `}
+            </div>
+          </div>
+        </aside>
+
+        <!-- [오른쪽 영역] 구조별 편집 모드 vs 실제 MK Pick 기사 미리보기 모드 -->
+        <div>
+          ${isPreview ? `
+            <!-- ============================================================== -->
+            <!-- 👁️ 실제 MK Pick 기사 미리보기 모드 (독자에게 보이는 최종 화면) -->
+            <!-- ============================================================== -->
+            <div class="article-paper">
+              <div class="flex-between mb-12" style="padding: 10px 14px; background-color: var(--mk-orange-light); border: 0.5px solid var(--mk-orange-border); border-radius: var(--radius-general);">
+                <div style="font-size: 12.5px; font-weight: 700; color: var(--mk-orange);">
+                  👁️ 실제 MK Pick 기사 발행 미리보기 화면입니다. (노란색 형광펜 문장을 클릭하면 팩트체크 완료로 전환됩니다)
+                </div>
+                <button type="button" class="btn btn-sm btn-primary" data-editor-mode="edit">✏️ 편집 화면으로 돌아가기</button>
+              </div>
+
+              <div style="margin-bottom: 10px;">
+                <span class="badge badge-orange" style="margin-right: 8px; font-weight: 800;">${escapeHtml(sb.mkCategory || '산업 Q&A')}</span>
+                <span style="font-size: 13px; color: var(--text-secondary); font-weight: 600;">${escapeHtml(sb.byline || '산업 Q&A | 남궁선희 기자')}</span>
+              </div>
+
+              ${(sb.companyTags || []).length > 0 ? `
+                <div class="flex-row mb-12" style="gap: 6px;">
+                  ${(sb.companyTags || []).map(t => `<span style="font-size: 12px; font-weight: 700; color: var(--mk-orange);">#${escapeHtml(t)}</span>`).join('')}
+                </div>
+              ` : ''}
+
+              <h1 style="font-size: 26px; font-weight: 800; line-height: 1.38; color: var(--text-primary); margin-bottom: 18px; letter-spacing: -0.5px;">
+                ${escapeHtml(w.title)}
+              </h1>
+
+              <div class="article-ai-box">
+                <div style="font-size: 12.5px; font-weight: 800; color: var(--mk-orange); margin-bottom: 6px;">AI 팩트 체크 요약</div>
+                ${(sb.aiFactSummary || []).map(line => `<div style="font-size: 14px; line-height: 1.65; font-weight: 600; margin-bottom: 3px;">${escapeHtml(line)}</div>`).join('')}
+              </div>
+
+              ${sb.subtitle ? `
+                <div class="article-subtitle-box" style="font-size: 15px; font-weight: 700; color: var(--text-secondary); line-height: 1.6; white-space: pre-line;">${escapeHtml(sb.subtitle)}</div>
+              ` : ''}
+
+              <hr class="doc-divider" />
+
+              ${(w.draftSections || []).map(sec => `
+                <div style="margin-bottom: 28px;">
+                  <h2 style="font-size: 19px; font-weight: 800; color: var(--text-primary); margin-bottom: 10px;">
+                    ${escapeHtml(sec.title)}
+                  </h2>
+                  <div style="font-size: 15.5px; line-height: 1.85; color: var(--text-primary); white-space: pre-line;">${escapeHtml(sec.content)}</div>
+                </div>
+              `).join('')}
+
+              ${(w.factChecks || []).length > 0 ? `
+                <div style="margin-bottom: 24px; padding: 14px 16px; background-color: var(--bg-subtle); border: var(--border-thin); border-radius: var(--radius-general);">
+                  <div class="flex-between mb-8">
+                    <strong style="font-size: 13px;">🖍️ 본문 수치·날짜 팩트체크 점검 (클릭 시 확인 토글)</strong>
+                    <span class="text-muted">${unverifiedCount > 0 ? `미확인 ${unverifiedCount}건` : '모두 확인 완료'}</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                    ${(w.factChecks || []).map(fc => {
+                      const isVerified = fc.status !== '미처리';
+                      return `
+                        <span class="fc-chip ${isVerified ? 'verified' : ''}" data-toggle-fc="${fc.id}">
+                          <strong>${isVerified ? '✓ 확인됨:' : '• 확인 필요:'}</strong> ${escapeHtml(fc.sentence)}
+                        </span>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              ` : ''}
+
+              <hr class="doc-divider" />
+
+              <div style="margin-bottom: 28px;">
+                <h3 style="font-size: 17px; font-weight: 800; margin-bottom: 10px;">${escapeHtml(sb.summaryTable?.title || '[요약표]')}</h3>
+                <div class="table-wrap">
+                  <table class="mk-table">
+                    <thead>
+                      <tr>
+                        ${(sb.summaryTable?.headers || []).map(h => `<th>${escapeHtml(h)}</th>`).join('')}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${(sb.summaryTable?.rows || []).map(row => `
+                        <tr>
+                          ${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <hr class="doc-divider" />
+
+              <div style="margin-bottom: 28px;">
+                <h3 style="font-size: 17px; font-weight: 800; margin-bottom: 12px;">자주 묻는 질문 (FAQ)</h3>
+                ${(sb.faqs || []).map(faq => `
+                  <div style="margin-bottom: 14px; padding-bottom: 12px; border-bottom: var(--border-thin);">
+                    <div style="font-weight: 800; font-size: 15px; margin-bottom: 4px; color: var(--text-primary);">${escapeHtml(faq.q)}</div>
+                    <div style="font-size: 14.5px; color: var(--text-secondary); line-height: 1.65;">A. ${escapeHtml(faq.a)}</div>
+                  </div>
+                `).join('')}
+              </div>
+
+              <div style="border-left: 3px solid var(--mk-orange); padding-left: 14px; margin-bottom: 18px; font-size: 15px; font-weight: 800;">
+                ${escapeHtml(sb.oneLineSummary || '')}
+              </div>
+
+              <div style="font-size: 12.5px; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-top: 12px; border-top: var(--border-thin);">
+                <span>${escapeHtml(sb.imageRecommendations?.[0]?.caption || '< 출처 : 각 사 제공 >')}</span>
+                <span>${escapeHtml(sb.noticeText || '')}</span>
+              </div>
+            </div>
+          ` : `
+            <!-- ============================================================== -->
+            <!-- ✏️ 구조별 편집 모드 (8단계 블록 배지로 기사 구조가 한눈에 들어오는 편집기) -->
+            <!-- ============================================================== -->
+            <div>
+
+              <!-- STEP 01: MK Pick 5대 카테고리 분류 & 바이라인·태그 -->
+              <section class="editor-block-section" id="block-step-1">
+                <div class="editor-step-header">
+                  <div class="flex-row" style="gap: 8px;">
+                    <span class="editor-step-badge">STEP 01 · 카테고리 & 바이라인</span>
+                    <span style="font-size: 12.5px; color: var(--text-secondary); font-weight: 600;">
+                      ${escapeHtml(sb.mkCategoryReason || recommendMkPickCategory(w.keyword, w.typeId, w.inputCompany).categoryReason)}
+                    </span>
+                  </div>
+                </div>
+
+                <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">
+                  ${MK_PICK_CATEGORIES.map(cat => {
+                    const currentCat = sb.mkCategory || recommendMkPickCategory(w.keyword, w.typeId, w.inputCompany).recommendedCategory;
+                    const isActiveCat = currentCat === cat.id;
+                    return `
+                      <button
+                        type="button"
+                        data-pick-mk-cat="${escapeHtml(cat.id)}"
+                        style="padding: 5px 12px; border-radius: 99px; border: ${isActiveCat ? '1px solid var(--mk-orange)' : 'var(--border-thin)'}; background-color: ${isActiveCat ? 'var(--mk-orange)' : 'var(--white)'}; color: ${isActiveCat ? '#FFFFFF' : 'var(--text-secondary)'}; font-size: 12.5px; font-weight: ${isActiveCat ? '800' : '600'}; cursor: pointer; font-family: inherit;"
+                        title="${escapeHtml(cat.desc)}"
+                      >
+                        ${isActiveCat ? '✓ ' : ''}${escapeHtml(cat.name)}
+                      </button>
+                    `;
+                  }).join('')}
+                </div>
+
+                <div class="grid-2">
+                  <div>
+                    <label class="text-muted" style="display: block; margin-bottom: 4px; font-weight: 700;">라벨 · 기자 바이라인</label>
+                    <input type="text" class="doc-editable-input" id="docByline" value="${escapeHtml(sb.byline || `${sb.mkCategory || '산업 Q&A'} | 남궁선희 기자`)}" style="font-size: 13px; color: var(--text-secondary); font-weight: 600;" />
+                  </div>
+                  <div>
+                    <label class="text-muted" style="display: block; margin-bottom: 4px; font-weight: 700;">업체명 · 핵심 키워드 태그 (쉼표로 구분)</label>
+                    <input type="text" class="doc-editable-input" id="docTags" value="${escapeHtml((sb.companyTags || []).join(', '))}" style="font-size: 13px; color: var(--mk-orange); font-weight: 700;" placeholder="예: 카카오프렌즈, 라이엇 게임즈, 롤드컵" />
+                  </div>
+                </div>
+              </section>
+
+              <!-- STEP 02: 메인 헤드라인 & 추천 제목 5선 -->
+              <section class="editor-block-section" id="block-step-2">
+                <div class="editor-step-header">
+                  <div class="flex-row" style="gap: 8px;">
+                    <span class="editor-step-badge">STEP 02 · 기사 헤드라인</span>
+                    <span class="text-muted">큰따옴표(" ") 인용구 + 말줄임표(…) + 핵심 키워드 조합이 GEO 검색 노출에 유리합니다.</span>
+                  </div>
+                  <button type="button" class="text-action" data-copy-part="headline">📋 제목만 복사</button>
+                </div>
+
+                <textarea class="doc-editable-textarea doc-headline-input mb-12" id="docMainHeadline" rows="2" placeholder="기사 제목을 입력하세요">${escapeHtml(w.title)}</textarea>
+
+                <div style="background-color: var(--bg-subtle); border: var(--border-thin); border-radius: var(--radius-general); padding: 10px 12px;">
+                  <div style="font-size: 12px; font-weight: 800; color: var(--text-secondary); margin-bottom: 6px;">
+                    💡 AI 추천 헤드라인 5선 (원하는 제목을 클릭하면 위 제목칸에 즉시 적용됩니다)
+                  </div>
+                  ${(w.titleCandidates || []).map((tc, i) => {
+                    const isSelected = (w.title || '').trim() === (tc.title || '').trim();
+                    return `
+                      <div class="headline-pick-row ${isSelected ? 'active' : ''}" data-pick-headline-idx="${i}">
+                        <span style="font-size: 13px; font-weight: ${isSelected ? '800' : '500'}; color: var(--text-primary);">
+                          <span style="color: var(--mk-orange); font-weight: 800; margin-right: 6px;">0${i + 1}</span>
+                          ${escapeHtml(tc.title)}
+                        </span>
+                        <span style="font-size: 11.5px; font-weight: 700; color: ${isSelected ? 'var(--mk-orange)' : 'var(--text-muted)'}; white-space: nowrap; flex-shrink: 0;">
+                          ${isSelected ? '✓ 현재 적용됨' : '이 제목으로 교체 →'}
+                        </span>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </section>
+
+              <!-- STEP 03 & 04: AI 팩트 체크 3줄 요약 + 리드 부제(Subtitle) -->
+              <section class="editor-block-section" id="block-step-3">
+                <div class="editor-step-header">
+                  <div class="flex-row" style="gap: 8px;">
+                    <span class="editor-step-badge">STEP 03 · AI 팩트 체크 3줄 요약</span>
+                    <span class="text-muted">생성형 AI(퍼플렉시티·챗GPT)가 기사 상단에서 가장 먼저 인용하는 1~3번 핵심 팩트 요약입니다.</span>
+                  </div>
+                  <button type="button" class="text-action" data-copy-part="aisummary">📋 AI 요약만 복사</button>
+                </div>
+
+                <div class="article-ai-box" id="docAiBoxWrap" style="margin: 0 0 16px 0;">
+                  <textarea class="doc-editable-textarea" id="docAiSummary" rows="3" style="font-size: 13.5px; line-height: 1.65; font-weight: 600; background-color: var(--white);">${escapeHtml((sb.aiFactSummary || []).join('\n'))}</textarea>
+                </div>
+
+                <div id="block-step-4" style="padding-top: 12px; border-top: var(--border-thin);">
+                  <div class="flex-between mb-6">
+                    <div class="flex-row" style="gap: 8px;">
+                      <span class="editor-step-badge">STEP 04 · 기사 리드 부제 (Subtitle)</span>
+                      <span class="text-muted">본문 시작 전 기사 전체 맥락을 2줄로 압축해 보여주는 부제입니다.</span>
+                    </div>
+                  </div>
+                  <div class="article-subtitle-box" style="margin: 0;">
+                    <textarea class="doc-editable-textarea" id="docSubtitle" rows="2" style="font-size: 14px; font-weight: 700; color: var(--text-secondary); line-height: 1.55;" placeholder="기사 핵심 맥락을 요약하는 부제(1~2줄)를 입력하세요">${escapeHtml(sb.subtitle || '')}</textarea>
+                  </div>
+                </div>
+              </section>
+
+              <!-- STEP 05: 본문 단락 (질문형 소제목 + 매경 경어체 본문 + 단락별 역할 배지·순서 이동·문체 교정) -->
+              <section class="editor-block-section" id="block-step-5">
+                <div class="editor-step-header">
+                  <div class="flex-row" style="gap: 8px;">
+                    <span class="editor-step-badge">STEP 05 · 본문 단락 (${(w.draftSections || []).length}개 단락)</span>
+                    <span class="text-muted">독자 질문형 소제목("~할까요?")과 매경 Pick 경어체("~합니다") 본문으로 구성됩니다.</span>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-outline-orange" id="addDocSectionBtn">+ 새 본문 단락 추가</button>
+                </div>
+
+                <div id="docSectionsContainer">
+                  ${(w.draftSections || []).map((sec, sIdx) => {
+                    const roleLabel = sectionRoleLabels[sIdx] || `단락 0${sIdx + 1} · 심층 분석 및 사례`;
+                    const secCharLen = (sec.content || '').length;
+                    return `
+                      <div style="padding: 14px 16px; border: var(--border-thin); border-radius: var(--radius-general); background-color: var(--bg-subtle); margin-bottom: 14px;" id="secWrap-${sec.id}">
+                        <div class="flex-between mb-8" style="flex-wrap: wrap; gap: 6px;">
+                          <div class="flex-row" style="gap: 6px;">
+                            <span style="font-size: 11.5px; font-weight: 800; color: var(--mk-orange); background-color: var(--white); border: 0.5px solid var(--mk-orange-border); padding: 2px 8px; border-radius: 4px;">
+                              단락 0${sIdx + 1} · ${escapeHtml(roleLabel)}
+                            </span>
+                            <span class="text-muted" id="secCharCount-${sec.id}">${secCharLen.toLocaleString()}자</span>
+                          </div>
+                          <div class="flex-row" style="gap: 8px;">
+                            <button type="button" class="text-action-orange" data-polish-sec="${sec.id}" title="평어체(~한다/이다) 문장을 매경 Pick 표준 경어체(~합니다)로 자동 교정합니다">
+                              ✨ 매경 문체(~합니다) 다듬기
+                            </button>
+                            ${sIdx > 0 ? `<button type="button" class="text-action" data-move-sec-up="${sIdx}" title="이 단락을 위로 이동">↑ 위로</button>` : ''}
+                            ${sIdx < (w.draftSections || []).length - 1 ? `<button type="button" class="text-action" data-move-sec-down="${sIdx}" title="이 단락을 아래로 이동">↓ 아래로</button>` : ''}
+                            ${(w.draftSections || []).length > 1 ? `
+                              <button type="button" class="text-action" data-del-doc-sec="${sec.id}" style="color: var(--text-muted);">삭제</button>
+                            ` : ''}
+                          </div>
+                        </div>
+
+                        <div class="mb-8">
+                          <label class="text-muted" style="display: block; margin-bottom: 3px; font-weight: 700;">■ 질문형 소제목</label>
+                          <input type="text" class="doc-editable-input doc-sec-title-input" data-doc-sec-title="${sec.id}" value="${escapeHtml(sec.title)}" placeholder="독자 호기심을 자극하는 질문형 소제목을 입력하세요" />
+                        </div>
+
+                        <div>
+                          <label class="text-muted" style="display: block; margin-bottom: 3px; font-weight: 700;">본문 내용 ('~합니다' 체)</label>
+                          <textarea class="doc-editable-textarea doc-body-textarea" id="secBody-${sec.id}" data-doc-sec-body="${sec.id}" rows="5" placeholder="본문 내용을 '~합니다' 체로 입력하세요">${escapeHtml(sec.content)}</textarea>
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </section>
+
+              <!-- STEP 06: 핵심 비교 요약표 -->
+              <section class="editor-block-section" id="block-step-6">
+                <div class="editor-step-header">
+                  <div class="flex-row" style="gap: 8px;">
+                    <span class="editor-step-badge">STEP 06 · 핵심 비교 요약표</span>
+                    <span class="text-muted">AI 검색엔진이 구조화된 데이터로 즉시 채택할 수 있도록 표 형태로 핵심 정보를 정리합니다.</span>
+                  </div>
+                  <div class="flex-row" style="gap: 10px;">
+                    <button type="button" class="text-action-orange" id="docAddTableRowBtn">+ 행 추가</button>
+                    <button type="button" class="text-action" id="docAddTableColBtn">+ 열 추가</button>
+                    <button type="button" class="text-action" data-copy-part="table">📋 요약표만 복사</button>
+                  </div>
+                </div>
+
+                <div class="mb-8">
+                  <input type="text" class="doc-editable-input" id="docTableTitle" value="${escapeHtml(sb.summaryTable?.title || '[요약표] 핵심 비교')}" style="font-size: 15.5px; font-weight: 800;" />
+                </div>
+
+                <div class="table-wrap">
+                  <table class="mk-table">
+                    <thead>
+                      <tr>
+                        ${(sb.summaryTable?.headers || []).map((h, cIdx) => `
+                          <th>
+                            <input type="text" class="doc-editable-input" data-doc-th="${cIdx}" value="${escapeHtml(h)}" style="font-weight: 800; font-size: 13px; background: transparent; border-color: transparent;" />
+                          </th>
+                        `).join('')}
+                        <th style="width: 48px; text-align: center; font-weight: 500; color: var(--text-muted);">삭제</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${(sb.summaryTable?.rows || []).map((row, rIdx) => `
+                        <tr>
+                          ${row.map((cell, cIdx) => `
+                            <td>
+                              <input type="text" class="doc-editable-input" data-doc-td="${rIdx}-${cIdx}" value="${escapeHtml(cell)}" style="font-size: 13px;" />
+                            </td>
+                          `).join('')}
+                          <td style="text-align: center;">
+                            <button type="button" class="text-action" data-doc-del-row="${rIdx}" style="color: var(--text-muted);">✕</button>
+                          </td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <!-- STEP 07: 자주 묻는 질문 (FAQ) & 팬아웃(Query Fan-out) 추천 질문 -->
+              <section class="editor-block-section" id="block-step-7">
+                <div class="editor-step-header">
+                  <div class="flex-row" style="gap: 8px;">
+                    <span class="editor-step-badge">STEP 07 · 독자 자연어 FAQ (${(sb.faqs || []).length}문항)</span>
+                    <span class="text-muted">독자가 검색창·AI에 실제로 질문하는 구어체 질의(Q)와 팩트 답변(A)입니다 (5문항 이상 권장).</span>
+                  </div>
+                  <div class="flex-row" style="gap: 10px;">
+                    ${(sb.fanoutQuestions && sb.fanoutQuestions.length > 0) ? `
+                      <button type="button" class="text-action-orange" id="docToggleFanoutBtn">
+                        ${state.fanoutOpen ? `💡 팬아웃 추천 질문(${sb.fanoutQuestions.length}개) 접기 ▲` : `💡 팬아웃 추천 질문(${sb.fanoutQuestions.length}개) 열기 ▼`}
+                      </button>
+                    ` : ''}
+                    <button type="button" class="text-action" id="docAddFaqBtn">+ 직접 질문 추가</button>
+                    <button type="button" class="text-action" data-copy-part="faq">📋 FAQ만 복사</button>
+                  </div>
+                </div>
+
+                ${state.fanoutOpen && sb.fanoutQuestions && sb.fanoutQuestions.length > 0 ? `
+                  <div style="background-color: var(--mk-orange-light); border: 0.5px solid var(--mk-orange-border); border-radius: var(--radius-general); padding: 12px 14px; margin-bottom: 16px;">
+                    <div class="flex-between mb-6" style="padding-bottom: 6px; border-bottom: 0.5px solid var(--mk-orange-border);">
+                      <div>
+                        <span style="font-size: 12.5px; font-weight: 800; color: var(--mk-orange);">💡 팬아웃 쿼리(Query Fan-out) 연관 추천 질문 ${sb.fanoutQuestions.length}선</span>
+                        <span style="font-size: 12px; color: var(--text-secondary); margin-left: 6px;">· 클릭하면 아래 기사 FAQ 목록에 즉시 추가됩니다.</span>
+                      </div>
+                    </div>
+                    ${sb.fanoutQuestions.map((fq, fIdx) => `
+                      <div class="clean-list-row" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 8px 4px;">
+                        <div style="font-size: 12.5px; line-height: 1.5; flex: 1;">
+                          <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 2px;">
+                            ${fq.category ? `<span style="display: inline-block; font-size: 10.5px; font-weight: 800; color: var(--mk-orange); background-color: var(--white); border: 0.5px solid var(--mk-orange-border); padding: 1px 6px; border-radius: 99px; margin-right: 6px;">${escapeHtml(fq.category)}</span>` : ''}
+                            Q. ${escapeHtml(fq.q.replace(/^Q\d+\.\s*/i, ''))}
+                          </div>
+                          <div style="font-size: 12px; color: var(--text-secondary);">A. ${escapeHtml(fq.a)}</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-primary" data-pick-fanout="${fIdx}" style="padding: 4px 10px; font-size: 11.5px;">+ FAQ에 추가</button>
+                      </div>
+                    `).join('')}
+                  </div>
+                ` : ''}
+
+                <div>
+                  ${(sb.faqs || []).map((faq, idx) => `
+                    <div style="padding: 10px 12px; margin-bottom: 10px; background-color: var(--bg-subtle); border: var(--border-thin); border-radius: var(--radius-general);">
+                      <div class="flex-between mb-6">
+                        <input type="text" class="doc-editable-input" data-doc-faq-q="${idx}" value="${escapeHtml(faq.q)}" style="font-weight: 800; font-size: 14px; background-color: var(--white);" />
+                        <button type="button" class="text-action" data-doc-del-faq="${idx}" style="font-size: 12px; color: var(--text-muted);">삭제</button>
+                      </div>
+                      <textarea class="doc-editable-textarea" data-doc-faq-a="${idx}" rows="2" style="font-size: 13.5px; color: var(--text-secondary); line-height: 1.6; background-color: var(--white);">${escapeHtml(faq.a)}</textarea>
+                    </div>
+                  `).join('')}
+                </div>
+              </section>
+
+              <!-- STEP 08: 마무리 한 줄 요약 & 이미지 캡션 · 고지 문구 -->
+              <section class="editor-block-section" id="block-step-8">
+                <div class="editor-step-header">
+                  <div class="flex-row" style="gap: 8px;">
+                    <span class="editor-step-badge">STEP 08 · 마무리 한 줄 요약 & 출처 고지</span>
+                    <span class="text-muted">"한 줄 요약! ~입니다." 형식으로 기사의 핵심 결론을 매듭짓습니다.</span>
+                  </div>
+                </div>
+
+                <div style="border-left: 3px solid var(--mk-orange); padding-left: 12px; margin-bottom: 14px;">
+                  <textarea class="doc-editable-textarea" id="docOneLine" rows="2" style="font-size: 14.5px; font-weight: 800;">${escapeHtml(sb.oneLineSummary || '')}</textarea>
+                </div>
+
+                <div class="grid-2" style="padding-top: 10px; border-top: var(--border-thin);">
+                  <div>
+                    <label class="text-muted" style="display: block; margin-bottom: 4px; font-weight: 700;">대표 이미지 캡션 문구</label>
+                    <input type="text" class="doc-editable-input" id="docImgCaption" value="${escapeHtml(sb.imageRecommendations?.[0]?.caption || '< 출처 : 각 사 제공 >')}" style="font-size: 12.5px; color: var(--text-secondary);" />
+                  </div>
+                  <div>
+                    <label class="text-muted" style="display: block; margin-bottom: 4px; font-weight: 700;">하단 고지 문구</label>
+                    <input type="text" class="doc-editable-input" id="docNotice" value="${escapeHtml(sb.noticeText || '')}" style="font-size: 12.5px; color: var(--text-muted);" />
+                  </div>
+                </div>
+              </section>
+
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+
+    // 렌더링 직후 모든 textarea 높이를 내용에 맞게 자동 확장하여 글자 잘림 및 불필요한 리사이즈 핸들 제거
+    autoResizeAllTextareas(root);
+    bindGeoJumpEvents(document.getElementById('geoChecklistContainer'));
+
+    // ========================================================================
+    // 이벤트 바인딩 (편집기 화면)
+    // ========================================================================
+
+    document.getElementById('backToHomeBtn').addEventListener('click', () => {
+      state.screen = 'home';
+      render(false);
+    });
+
+    // 상단 편집 모드 / 실제 기사 미리보기 모드 전환
+    root.querySelectorAll('[data-editor-mode]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.editorViewMode = btn.getAttribute('data-editor-mode');
+        render(true);
+      });
+    });
+
+    // 왼쪽 보조 패널 3탭 전환 (취재·메모 / 점검·팩트 / 목차·흐름)
+    root.querySelectorAll('[data-left-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.leftPanelTab = btn.getAttribute('data-left-tab');
+        render(true);
+      });
+    });
+
+    // 상단 '팩트 확인 필요 N건' 배지 클릭 시 왼쪽 [점검·팩트] 탭으로 즉시 전환
+    document.getElementById('liveFcCountBadge')?.addEventListener('click', () => {
+      state.leftPanelTab = 'check';
+      render(true);
+      showToast('왼쪽 [✅ 점검·팩트] 패널에서 수치·날짜 문장을 클릭해 확인 처리하세요.');
+    });
+
+    // 왼쪽 [목차·흐름] 탭에서 블록 클릭 시 해당 블록으로 스크롤 점프
+    root.querySelectorAll('[data-jump-block]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.getAttribute('data-jump-block');
+        if (state.editorViewMode === 'preview') {
+          state.editorViewMode = 'edit';
+          render(true);
+        }
+        setTimeout(() => flashElement(targetId), 50);
+      });
+    });
+
+    // 유형 변경 시 현재 키워드 그대로 해당 유형의 본문 구조·소제목·요약표·FAQ로 즉시 재구성
+    document.getElementById('editorTypeSelect').addEventListener('change', async e => {
+      const nextType = Number(e.target.value);
+      w.typeId = nextType;
+      showToast(`[${CONTENT_TYPES[nextType].shortName}] 흐름에 맞춰 본문 소제목·요약표·FAQ 구성을 전환합니다...`);
+      await triggerLiveNewsRefresh(true, w.keyword);
+    });
+
+    // 빈 문서로 비우기 (블로킹 confirm 없이 즉시 실행)
+    document.getElementById('clearToBlankBtn').addEventListener('click', () => {
+      w.title = '"인용구를 입력하세요"…핵심 설명을 입력하는 제목';
+      w.draftSections = [
+        {
+          id: 'sec-blank-1',
+          title: '1. 첫 번째 소제목을 입력하세요',
+          subtitle: '소제목 보조 설명을 입력하세요',
+          content: '독자에게 말을 거는 질문("~하신 적 없으신가요?")으로 도입부를 시작하고, 본문은 "~합니다" 체로 작성해 주세요.',
+          sourceIds: []
+        }
+      ];
+      w.summaryBlocks.subtitle = '기사 핵심 내용을 요약하는 부제(1~3줄)를 입력하세요';
+      w.summaryBlocks.aiFactSummary = [
+        '1. 첫 번째 핵심 팩트 요약을 입력하세요.',
+        '2. 두 번째 핵심 팩트 요약을 입력하세요.',
+        '3. 세 번째 핵심 팩트 요약을 입력하세요.'
+      ];
+      w.summaryBlocks.summaryTable = {
+        title: '[요약표] 제목을 입력하세요',
+        headers: ['구분', '핵심 내용', '비고'],
+        rows: [['항목 1', '내용을 입력하세요', '비고 입력'], ['항목 2', '내용을 입력하세요', '비고 입력']]
+      };
+      w.summaryBlocks.faqs = [
+        { q: 'Q1. 독자들이 가장 궁금해할 질문을 입력하세요?', a: '답변을 "~합니다" 체로 입력하세요.' }
+      ];
+      w.summaryBlocks.oneLineSummary = '한 줄 요약! 기사 전체 핵심 메시지를 한 문장으로 정리해 주세요.';
+      w.factChecks = [];
+      saveCurrentWork(false);
+      showToast('🧹 깨끗한 빈 양식으로 비워졌습니다. [↺ 초안 복원]을 누르면 언제든 복구됩니다.');
+      render(true);
+    });
+
+    // 예시 내용 다시 채우기
+    document.getElementById('restoreExampleBtn').addEventListener('click', () => {
+      const preset = buildPresetScenario({
+        keyword: CONTENT_TYPES[w.typeId]?.exampleKeyword || w.keyword,
+        selectedType: w.typeId
+      });
+      w.title = preset.titleCandidates[0].title;
+      w.titleCandidates = preset.titleCandidates;
+      w.sources = preset.sources;
+      w.researchItems = preset.researchItems;
+      w.draftSections = preset.draftSections;
+      w.summaryBlocks = preset.summaryBlocks;
+      w.factChecks = preset.factChecks;
+      saveCurrentWork(false);
+      showToast('↺ 모범 예시 기사가 다시 채워졌습니다.');
+      render(true);
+    });
+
+    // 우측 상단 고정 'CMS 붙여넣기용 전체 복사'
+    document.getElementById('copyFullArticleTopBtn').addEventListener('click', async () => {
+      const remain = (w.factChecks || []).filter(f => f.status === '미처리').length;
+      const latestText = buildPlainTextArticle(w);
+      await navigator.clipboard.writeText(latestText);
+      if (remain > 0) {
+        showToast(`📋 전체 복사 완료! (참고: 미확인 팩트체크 항목이 ${remain}건 있습니다)`);
+      } else {
+        showToast('📋 모든 팩트체크 완료! 기사 전체가 클립보드에 복사되었습니다.');
+      }
+    });
+
+    // 영역별 개별 복사 버튼 (제목만, AI요약만, 요약표만, FAQ만 복사)
+    root.querySelectorAll('[data-copy-part]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const part = btn.getAttribute('data-copy-part');
+        let textToCopy = '';
+        if (part === 'headline') {
+          textToCopy = w.title || '';
+        } else if (part === 'aisummary') {
+          textToCopy = (sb.aiFactSummary || []).join('\n');
+        } else if (part === 'table') {
+          const tLines = [sb.summaryTable?.title || '[요약표]', (sb.summaryTable?.headers || []).join(' | ')];
+          (sb.summaryTable?.rows || []).forEach(r => tLines.push(r.join(' | ')));
+          textToCopy = tLines.join('\n');
+        } else if (part === 'faq') {
+          textToCopy = (sb.faqs || []).map(f => `${f.q}\nA. ${f.a}`).join('\n\n');
+        }
+        await navigator.clipboard.writeText(textToCopy);
+        showToast('📋 선택한 영역이 클립보드에 복사되었습니다.');
+      });
+    });
+
+    // 왼쪽 패널: 실시간 뉴스 검색해 팩트만 추가 OR 오른쪽 기사 전체 새로 쓰기
+    async function triggerLiveNewsRefresh(rebuildDraft, customKeyword) {
+      const kwEl = document.getElementById('leftSearchKwInput');
+      const compEl = document.getElementById('leftSearchCompInput');
+      const kw = (customKeyword || (kwEl ? kwEl.value : w.keyword)).trim();
+      const comp = compEl ? compEl.value.trim() : (w.inputCompany || '');
+      if (!kw) {
+        showToast('검색할 키워드를 입력해 주세요.');
+        return;
+      }
+      showToast(`'${kw}' 관련 최신 뉴스에서 핵심 팩트만 추출해 매경 문체로 재구성 중입니다...`);
+      try {
+        const res = await apiFetch(`/api/works/${w.id}/refresh-news`, {
+          method: 'POST',
+          body: JSON.stringify({
+            keyword: kw,
+            company: comp,
+            typeId: w.typeId,
+            rebuildDraft
+          })
+        });
+        state.currentWork = res.work;
+        const idx = state.works.findIndex(item => item.id === w.id);
+        if (idx !== -1) state.works[idx] = res.work;
+        showToast(
+          rebuildDraft
+            ? `✓ '${kw}' 최신 팩트 ${res.liveNewsCount}건을 바탕으로 오른쪽 기사 전체를 새로 작성했습니다!`
+            : `✓ '${kw}' 최신 팩트 ${res.liveNewsCount}건을 매경 문체로 다듬어 취재 메모장에 추가했습니다!`
+        );
+        render(true);
+      } catch (err) {
+        showToast(err.message);
+      }
+    }
+
+    document.getElementById('leftFetchMemoOnlyBtn')?.addEventListener('click', () => triggerLiveNewsRefresh(false));
+    document.getElementById('leftRebuildDraftBtn')?.addEventListener('click', () => triggerLiveNewsRefresh(true));
+
+    // 왼쪽 패널: 인기 트렌드 태그 클릭 시 바로 오른쪽 기사 재작성
+    root.querySelectorAll('[data-quick-trend]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tag = btn.getAttribute('data-quick-trend');
+        const kwEl = document.getElementById('leftSearchKwInput');
+        if (kwEl) kwEl.value = tag;
+        triggerLiveNewsRefresh(true, tag);
+      });
+    });
+
+    // 왼쪽 패널: 취재 메모 직접 추가 (타 언론사 문구를 붙여넣어도 매경 문체로 자동 패러프레이징!)
+    document.getElementById('addMemoBtn')?.addEventListener('click', () => {
+      const rawInput = document.getElementById('memoFactInput')?.value.trim() || '';
+      const url = document.getElementById('memoUrlInput')?.value.trim() || '';
+      if (!rawInput) {
+        showToast('취재 메모 내용을 입력해 주세요.');
+        return;
+      }
+      let finalFact = rawInput;
+      if (!/합니다\.?$|습니다\.?$|입니다\.?$/.test(rawInput)) {
+        finalFact = paraphraseNewsToMkFact(rawInput, w.keyword, '추가 자료').paraphrasedSentence;
+      }
+      const srcId = 'src-memo-' + Date.now();
+      if (url) {
+        w.sources.unshift({
+          id: srcId,
+          url,
+          title: url,
+          method: '취재 메모 출처',
+          reliability: '높음'
+        });
+      }
+      w.researchItems.unshift({
+        id: 'ri-memo-' + Date.now(),
+        category: '매경 문체 재가공',
+        fact: finalFact,
+        rawReference: rawInput !== finalFact ? `원문 요약 기준: ${rawInput.slice(0, 45)}...` : '',
+        sourceIds: url ? [srcId] : []
+      });
+      saveCurrentWork(false);
+      showToast('입력한 자료를 매경 문체("~합니다") 팩트로 다듬어 메모장에 추가했습니다.');
+      render(true);
+    });
+
+    // 취재 메모 [본문 반영 ->] 클릭 시 선택한 단락(또는 AI 요약)에 매경 문체 팩트 삽입 + 해당 단락 하이라이트!
+    root.querySelectorAll('[data-insert-memo]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-insert-memo');
+        const memo = (w.researchItems || []).find(r => r.id === id);
+        if (!memo) return;
+        const targetSelect = document.getElementById(`targetSecForMemo-${id}`);
+        const targetVal = targetSelect ? targetSelect.value : (w.draftSections?.[0]?.id || 'ai-summary');
+
+        if (state.editorViewMode === 'preview') {
+          state.editorViewMode = 'edit';
+        }
+
+        if (targetVal === 'ai-summary') {
+          const nextNum = (sb.aiFactSummary || []).length + 1;
+          sb.aiFactSummary = sb.aiFactSummary || [];
+          sb.aiFactSummary.push(`${nextNum}. ${memo.fact}`);
+          saveCurrentWork(false);
+          render(true);
+          flashElement('docAiSummary');
+          showToast('✓ 재가공된 팩트 문장이 오른쪽 [STEP 03 · AI 팩트 체크 요약]에 반영되었습니다!');
+        } else {
+          const targetSec = (w.draftSections || []).find(s => s.id === targetVal) || w.draftSections?.[0];
+          if (targetSec) {
+            targetSec.content = (targetSec.content ? targetSec.content.trim() + '\n\n' : '') + memo.fact;
+            w.factChecks = extractFactSentencesFromSections(w.draftSections, w.sources);
+            saveCurrentWork(false);
+            render(true);
+            flashElement(`secBody-${targetSec.id}`);
+            showToast(`✓ 재가공된 팩트 문장이 오른쪽 [${targetSec.title.slice(0, 16)}...] 단락에 반영되었습니다!`);
+          }
+        }
+      });
+    });
+
+    root.querySelectorAll('[data-del-memo]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-del-memo');
+        w.researchItems = (w.researchItems || []).filter(r => r.id !== id);
+        saveCurrentWork(false);
+        render(true);
+      });
+    });
+
+    // 추천 제목 5개 클릭 시 바로 위 기사 메인 헤드라인(#docMainHeadline) 즉시 변경 + 시각적 하이라이트
+    root.querySelectorAll('[data-pick-headline-idx]').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = Number(el.getAttribute('data-pick-headline-idx'));
+        const cur = state.currentWork;
+        if (!cur) return;
+        const picked = (cur.titleCandidates || [])[idx];
+        if (picked && picked.title) {
+          cur.selectedTitleId = picked.id || `tc-${idx + 1}`;
+          cur.title = picked.title;
+          const headlineEl = document.getElementById('docMainHeadline');
+          if (headlineEl) headlineEl.value = picked.title;
+          render(true);
+          flashElement('docMainHeadline');
+          saveCurrentWork(true);
+          showToast(`✓ 0${idx + 1}번 제목이 기사 메인 헤드라인에 적용되었습니다!`);
+        }
+      });
+    });
+
+    // 형광펜 팩트체크 클릭 토글
+    root.querySelectorAll('[data-toggle-fc]').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const fcId = chip.getAttribute('data-toggle-fc');
+        const item = (state.currentWork?.factChecks || []).find(f => f.id === fcId);
+        if (item) {
+          item.status = item.status === '미처리' ? '확인함' : '미처리';
+          render(true);
+          saveCurrentWork(true);
+        }
+      });
+    });
+
+    document.getElementById('verifyAllFactsBtn')?.addEventListener('click', () => {
+      (state.currentWork?.factChecks || []).forEach(f => {
+        f.status = '확인함';
+      });
+      render(true);
+      saveCurrentWork(true);
+      showToast('✓ 모든 수치·날짜 팩트체크 문장이 확인 완료로 처리되었습니다.');
+    });
+
+    // MK Pick 5대 카테고리 칩 클릭 시 즉시 카테고리 및 바이라인 라벨 반영
+    root.querySelectorAll('[data-pick-mk-cat]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const pickedCat = btn.getAttribute('data-pick-mk-cat');
+        const cur = state.currentWork;
+        if (!cur || !pickedCat) return;
+        cur.summaryBlocks = cur.summaryBlocks || {};
+        cur.summaryBlocks.mkCategory = pickedCat;
+        const catObj = MK_PICK_CATEGORIES.find(c => c.id === pickedCat);
+        if (catObj) {
+          cur.summaryBlocks.mkCategoryReason = `${catObj.desc}에 부합하여 [${pickedCat}] 카테고리로 설정되었습니다.`;
+        }
+        const parts = (cur.summaryBlocks.byline || '산업 Q&A | 남궁선희 기자 | 입력 2026.10.23 10:00').split('|').map(s => s.trim());
+        parts[0] = pickedCat;
+        cur.summaryBlocks.byline = parts.join(' | ');
+        render(true);
+        flashElement('docByline');
+        saveCurrentWork(true);
+        showToast(`✓ MK Pick 카테고리가 [${pickedCat}](으)로 변경되었습니다.`);
+      });
+    });
+
+    // 오른쪽 통합 문서 내부 인라인 편집 이벤트 (편집 모드일 때 바인딩)
+    document.getElementById('docByline')?.addEventListener('input', e => {
+      sb.byline = e.target.value;
+      saveCurrentWork(true);
+    });
+    document.getElementById('docTags')?.addEventListener('input', e => {
+      sb.companyTags = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+      saveCurrentWork(true);
+    });
+    document.getElementById('docMainHeadline')?.addEventListener('input', e => {
+      w.title = e.target.value;
+      autoResizeTextarea(e.target);
+      saveCurrentWork(true);
+    });
+    document.getElementById('docAiSummary')?.addEventListener('input', e => {
+      sb.aiFactSummary = e.target.value.split('\n').filter(line => line.trim().length > 0);
+      autoResizeTextarea(e.target);
+      saveCurrentWork(true);
+    });
+    document.getElementById('docSubtitle')?.addEventListener('input', e => {
+      sb.subtitle = e.target.value;
+      autoResizeTextarea(e.target);
+      saveCurrentWork(true);
+    });
+
+    // 본문 섹션 제목·내용 인라인 수정
+    root.querySelectorAll('[data-doc-sec-title]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const sec = w.draftSections.find(s => s.id === inp.getAttribute('data-doc-sec-title'));
+        if (sec) {
+          sec.title = inp.value;
+          saveCurrentWork(true);
+        }
+      });
+    });
+
+    root.querySelectorAll('[data-doc-sec-body]').forEach(ta => {
+      ta.addEventListener('input', () => {
+        autoResizeTextarea(ta);
+        const secId = ta.getAttribute('data-doc-sec-body');
+        const sec = w.draftSections.find(s => s.id === secId);
+        if (sec) {
+          sec.content = ta.value;
+          const secCountEl = document.getElementById(`secCharCount-${secId}`);
+          if (secCountEl) secCountEl.textContent = `${ta.value.length.toLocaleString()}자`;
+          updateLiveStatsAndGeoUI();
+        }
+      });
+      ta.addEventListener('change', () => {
+        w.factChecks = extractFactSentencesFromSections(w.draftSections, w.sources);
+        saveCurrentWork(true);
+      });
+    });
+
+    // 본문 단락별 [✨ 매경 문체(~합니다) 다듬기]
+    root.querySelectorAll('[data-polish-sec]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const secId = btn.getAttribute('data-polish-sec');
+        const sec = (w.draftSections || []).find(s => s.id === secId);
+        if (!sec) return;
+        sec.content = polishParagraphToMkStyle(sec.content);
+        saveCurrentWork(false);
+        render(true);
+        flashElement(`secBody-${secId}`);
+        showToast('✨ 해당 단락의 문장을 매경 Pick 표준 경어체("~합니다")로 다듬었습니다.');
+      });
+    });
+
+    // 본문 단락 순서 위로 / 아래로 이동
+    root.querySelectorAll('[data-move-sec-up]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.getAttribute('data-move-sec-up'));
+        if (idx > 0) {
+          const temp = w.draftSections[idx - 1];
+          w.draftSections[idx - 1] = w.draftSections[idx];
+          w.draftSections[idx] = temp;
+          saveCurrentWork(false);
+          render(true);
+          showToast('단락 순서를 위로 이동했습니다.');
+        }
+      });
+    });
+
+    root.querySelectorAll('[data-move-sec-down]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.getAttribute('data-move-sec-down'));
+        if (idx < w.draftSections.length - 1) {
+          const temp = w.draftSections[idx + 1];
+          w.draftSections[idx + 1] = w.draftSections[idx];
+          w.draftSections[idx] = temp;
+          saveCurrentWork(false);
+          render(true);
+          showToast('단락 순서를 아래로 이동했습니다.');
+        }
+      });
+    });
+
+    // 본문 단락 추가 / 삭제
+    document.getElementById('addDocSectionBtn')?.addEventListener('click', () => {
+      const newSecId = 'sec-' + Date.now();
+      w.draftSections.push({
+        id: newSecId,
+        title: '독자들이 가장 궁금해할 다음 질문은 무엇일까요?',
+        content: '여기에 본문 내용을 "~합니다" 체로 작성하세요.',
+        sourceIds: []
+      });
+      saveCurrentWork(false);
+      render(true);
+      flashElement(`secBody-${newSecId}`);
+    });
+
+    root.querySelectorAll('[data-del-doc-sec]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-del-doc-sec');
+        w.draftSections = w.draftSections.filter(s => s.id !== id);
+        saveCurrentWork(false);
+        render(true);
+      });
+    });
+
+    // 요약표 인라인 편집
+    document.getElementById('docTableTitle')?.addEventListener('input', e => {
+      sb.summaryTable.title = e.target.value;
+      saveCurrentWork(true);
+    });
+
+    root.querySelectorAll('[data-doc-th]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const cIdx = Number(inp.getAttribute('data-doc-th'));
+        sb.summaryTable.headers[cIdx] = inp.value;
+        saveCurrentWork(true);
+      });
+    });
+
+    root.querySelectorAll('[data-doc-td]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const [rIdx, cIdx] = inp.getAttribute('data-doc-td').split('-').map(Number);
+        if (sb.summaryTable?.rows?.[rIdx]) {
+          sb.summaryTable.rows[rIdx][cIdx] = inp.value;
+          saveCurrentWork(true);
+        }
+      });
+    });
+
+    document.getElementById('docAddTableRowBtn')?.addEventListener('click', () => {
+      const colLen = (sb.summaryTable?.headers || []).length || 4;
+      sb.summaryTable.rows.push(Array(colLen).fill('내용 입력'));
+      saveCurrentWork(false);
+      render(true);
+    });
+
+    document.getElementById('docAddTableColBtn')?.addEventListener('click', () => {
+      sb.summaryTable.headers.push('새 항목');
+      sb.summaryTable.rows.forEach(r => r.push('내용 입력'));
+      saveCurrentWork(false);
+      render(true);
+    });
+
+    root.querySelectorAll('[data-doc-del-row]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const rIdx = Number(btn.getAttribute('data-doc-del-row'));
+        sb.summaryTable.rows.splice(rIdx, 1);
+        saveCurrentWork(false);
+        render(true);
+      });
+    });
+
+    // FAQ 인라인 편집
+    const fanoutBtn = document.getElementById('docToggleFanoutBtn');
+    if (fanoutBtn) {
+      fanoutBtn.addEventListener('click', () => {
+        state.fanoutOpen = !state.fanoutOpen;
+        render(true);
+      });
+    }
+
+    root.querySelectorAll('[data-pick-fanout]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const fIdx = Number(btn.getAttribute('data-pick-fanout'));
+        const fq = sb.fanoutQuestions[fIdx];
+        if (!fq) return;
+        const nextNum = (sb.faqs || []).length + 1;
+        sb.faqs.push({
+          q: `Q${nextNum}. ${fq.q.replace(/^Q\d+\.\s*/, '')}`,
+          a: fq.a
+        });
+        sb.fanoutQuestions.splice(fIdx, 1);
+        saveCurrentWork(false);
+        showToast('선택한 질문이 FAQ에 추가되었습니다.');
+        render(true);
+      });
+    });
+
+    document.getElementById('docAddFaqBtn')?.addEventListener('click', () => {
+      const nextNum = (sb.faqs || []).length + 1;
+      sb.faqs.push({
+        q: `Q${nextNum}. 새로운 질문을 입력하세요?`,
+        a: '답변을 "~합니다" 체로 입력하세요.'
+      });
+      saveCurrentWork(false);
+      render(true);
+    });
+
+    root.querySelectorAll('[data-doc-faq-q]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const idx = Number(inp.getAttribute('data-doc-faq-q'));
+        if (sb.faqs[idx]) {
+          sb.faqs[idx].q = inp.value;
+          saveCurrentWork(true);
+        }
+      });
+    });
+
+    root.querySelectorAll('[data-doc-faq-a]').forEach(ta => {
+      ta.addEventListener('input', () => {
+        autoResizeTextarea(ta);
+        const idx = Number(ta.getAttribute('data-doc-faq-a'));
+        if (sb.faqs[idx]) {
+          sb.faqs[idx].a = ta.value;
+          saveCurrentWork(true);
+        }
+      });
+    });
+
+    root.querySelectorAll('[data-doc-del-faq]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.getAttribute('data-doc-del-faq'));
+        sb.faqs.splice(idx, 1);
+        saveCurrentWork(false);
+        render(true);
+      });
+    });
+
+    // 한 줄 요약, 캡션, 고지문구 인라인 수정
+    document.getElementById('docOneLine')?.addEventListener('input', e => {
+      autoResizeTextarea(e.target);
+      sb.oneLineSummary = e.target.value;
+      saveCurrentWork(true);
+    });
+    document.getElementById('docImgCaption')?.addEventListener('input', e => {
+      if (!sb.imageRecommendations || sb.imageRecommendations.length === 0) {
+        sb.imageRecommendations = [{ position: '대표 이미지', sourceUrl: '', keywords: [], caption: e.target.value }];
+      } else {
+        sb.imageRecommendations[0].caption = e.target.value;
+      }
+      saveCurrentWork(true);
+    });
+    document.getElementById('docNotice')?.addEventListener('input', e => {
+      sb.noticeText = e.target.value;
+      saveCurrentWork(true);
+    });
+  }
+
+  document.getElementById('brandHomeBtn').addEventListener('click', () => {
+    state.screen = 'home';
+    render(false);
+  });
+
+  initApp();
+})();

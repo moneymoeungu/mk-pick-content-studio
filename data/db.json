@@ -1,0 +1,918 @@
+{
+  "settings": {
+    "allowedDomain": "",
+    "perplexityApiKey": "",
+    "perplexityModel": "sonar",
+    "apiCallCount": 5
+  },
+  "users": [
+    {
+      "id": "user-1",
+      "email": "namgung@mk.co.kr",
+      "name": "남궁선희 기자",
+      "verified": true,
+      "createdAt": "2026-10-01T09:00:00.000Z"
+    }
+  ],
+  "styleGuides": [
+    {
+      "typeId": 1,
+      "typeName": "1. 유료 업체 타겟팅",
+      "headlinePattern": "큰따옴표 인용구 + 말줄임(…) + 설명형 문장 (예: \"스드메 대신 직접 골라요\"…달라진 2026 결혼 트렌드)",
+      "bylineRule": "\"산업Q&A\" 라벨, 남궁선희 기자, 입력·업데이트 일시 / 헤드라인 아래 파트너 업체명 태그 표기",
+      "aiSummaryRule": "AI 팩트 체크 요약 번호 1~3, 각 항목 1~2문장",
+      "subtitleRule": "2~3줄 요약 부제 (결혼 트렌드 레퍼런스 기준 3줄)",
+      "introRule": "독자에게 말을 거는 구어체 질문으로 시작 (\"~하신 적 없으신가요?\")",
+      "bodyTone": "모든 본문 및 Q&A 답변을 \"~합니다\" 체로 고정 (도입부 질문 등 일부 강조 표현만 구어체 허용)",
+      "tableFaqRule": "요약표 2개(세대별 비교표 + 업체 4곳 비교표) 필수 / FAQ 기본 7개(Q1~Q7) + 팬아웃 추천 질문 토글",
+      "oneLineRule": "\"한 줄 요약!\"으로 시작하는 1~2문장",
+      "noticeRule": "본 콘텐츠는 매경비즈 디지털뉴스룸(또는 콘텐츠·기획팀)이 공식 발표 자료와 보도자료를 바탕으로 작성했습니다.",
+      "captionRule": "< 출처 : 업체명 > 또는 \"본 사진은 기사의 이해를 돕기 위해 생성형 AI로 제작되었습니다\"",
+      "lengthRange": "공백 포함 3,800~4,600자 / 18~24문단 (상한 없음)",
+      "references": "결혼 트렌드 (10/14), 참고: 오늘의집, 스위첸, 제습기, KFC",
+      "updatedAt": "2026-10-22 09:00",
+      "updatedBy": "editor@mk.co.kr"
+    },
+    {
+      "typeId": 2,
+      "typeName": "2. 기념일",
+      "headlinePattern": "큰따옴표 인용구 + 말줄임(…) + 설명형 문장 (예: \"풍요의 달 10월, 숫자 10이 겹친 이유는?\"…임산부의 날 유래와 혜택 총정리)",
+      "bylineRule": "\"산업Q&A\" 라벨, 남궁선희 기자, 입력·업데이트 일시",
+      "aiSummaryRule": "AI 팩트 체크 요약 번호 1~3, 각 항목 1~2문장",
+      "subtitleRule": "2줄 부제 (임산부의 날 레퍼런스 기준 2줄)",
+      "introRule": "독자에게 말을 거는 구어체 질문으로 시작 (\"~알고 계셨나요?\", \"~찾아보신 적 없으신가요?\")",
+      "bodyTone": "모든 본문 및 Q&A 답변을 \"~합니다\" 체로 고정",
+      "tableFaqRule": "브랜드 혜택 비교 요약표 1개 필수 / FAQ 기본 5개(Q1~Q5) + 팬아웃 추천 질문 토글",
+      "oneLineRule": "\"한 줄 요약!\"으로 시작하는 1~2문장",
+      "noticeRule": "본 콘텐츠는 매경비즈 디지털뉴스룸(또는 콘텐츠·기획팀)이 공식 발표 자료와 보도자료를 바탕으로 작성했습니다.",
+      "captionRule": "< 출처 : 업체명 > 또는 \"본 사진은 기사의 이해를 돕기 위해 생성형 AI로 제작되었습니다\"",
+      "lengthRange": "공백 포함 3,200~4,000자 / 15~20문단 (상한 없음)",
+      "references": "임산부의 날 (10/10)",
+      "updatedAt": "2026-10-22 01:20",
+      "updatedBy": "namgung@mk.co.kr"
+    },
+    {
+      "typeId": 3,
+      "typeName": "3. 트렌드 1 (바이럴·계보형)",
+      "headlinePattern": "큰따옴표 인용구 + 말줄임(…) + 설명형 문장 (예: \"빵 사면 민음사 책갈피가?\"…국진이빵부터 이어진 띠부씰 계보)",
+      "bylineRule": "\"산업Q&A\" 라벨, 남궁선희 기자, 입력·업데이트 일시",
+      "aiSummaryRule": "AI 팩트 체크 요약 번호 1~3, 각 항목 1~2문장",
+      "subtitleRule": "1줄 핵심 부제 (민음사빵 레퍼런스 기준 1줄)",
+      "introRule": "독자에게 말을 거는 구어체 질문으로 시작 (\"~사보신 적 없으신가요?\")",
+      "bodyTone": "모든 본문 및 Q&A 답변을 \"~합니다\" 체로 고정",
+      "tableFaqRule": "연대별 계보 비교표(기본 포함) / AI 인용률 강화를 위해 FAQ 기본 5개 + 팬아웃 추천 질문 토글 기본 활성",
+      "oneLineRule": "\"한 줄 요약!\"으로 시작하는 1~2문장",
+      "noticeRule": "본 콘텐츠는 매경비즈 디지털뉴스룸(또는 콘텐츠·기획팀)이 공식 발표 자료와 보도자료를 바탕으로 작성했습니다.",
+      "captionRule": "< 출처 : 업체명 > 또는 \"본 사진은 기사의 이해를 돕기 위해 생성형 AI로 제작되었습니다\"",
+      "lengthRange": "공백 포함 3,000~3,800자 / 14~18문단 (상한 없음)",
+      "references": "민음사빵 (8/28)",
+      "updatedAt": "2026-10-22 09:00",
+      "updatedBy": "editor@mk.co.kr"
+    },
+    {
+      "typeId": 4,
+      "typeName": "4. 트렌드 2 (콘셉트·라인업형)",
+      "headlinePattern": "큰따옴표 인용구 + 말줄임(…) + 설명형 문장 (예: \"편의점마다 맛이 다르다고?\"…유통가 휩쓴 멀티플레이버 열풍)",
+      "bylineRule": "\"산업Q&A\" 라벨, 남궁선희 기자, 입력·업데이트 일시",
+      "aiSummaryRule": "AI 팩트 체크 요약 번호 1~3, 각 항목 1~2문장",
+      "subtitleRule": "2줄 부제 (레트로 열풍 레퍼런스 기준 2줄)",
+      "introRule": "독자에게 말을 거는 구어체 질문으로 시작 (\"~느껴보신 적 없으신가요?\")",
+      "bodyTone": "모든 본문 및 Q&A 답변을 \"~합니다\" 체로 고정",
+      "tableFaqRule": "채널·브랜드별 라인업 표 1~2개 / FAQ 기본 5개(용어 정리 포함 가능) + 팬아웃 추천 질문 토글 기본 활성",
+      "oneLineRule": "\"한 줄 요약!\"으로 시작하는 1~2문장",
+      "noticeRule": "본 콘텐츠는 매경비즈 디지털뉴스룸(또는 콘텐츠·기획팀)이 공식 발표 자료와 보도자료를 바탕으로 작성했습니다.",
+      "captionRule": "< 출처 : 업체명 > 또는 \"본 사진은 기사의 이해를 돕기 위해 생성형 AI로 제작되었습니다\"",
+      "lengthRange": "공백 포함 3,200~4,100자 / 15~20문단 (상한 없음)",
+      "references": "꼬깔콘 편의점 전용 맛 (8/10), 레트로 열풍 (7/31)",
+      "updatedAt": "2026-10-22 09:00",
+      "updatedBy": "editor@mk.co.kr"
+    },
+    {
+      "typeId": 5,
+      "typeName": "5. 영업 기업 맞춤 (Q&A 본문형)",
+      "headlinePattern": "큰따옴표 인용구 + 말줄임(…) + 설명형 문장 (예: \"중고거래도 정품 검수 시대\"…리커머스 트렌드 Q&A 7문 7답)",
+      "bylineRule": "\"산업Q&A\" 라벨, 남궁선희 기자, 입력·업데이트 일시 / 헤드라인 아래 대상 기업 태그 표기",
+      "aiSummaryRule": "AI 팩트 체크 요약 번호 1~3, 각 항목 1~2문장",
+      "subtitleRule": "1~2줄 부제 또는 생략 가능",
+      "introRule": "독자에게 말을 거는 구어체 질문으로 시작하는 도입 1문단 직후 Q1~Q7 본문 전개",
+      "bodyTone": "모든 Q&A 본문 답변을 \"~합니다\" 체로 고정",
+      "tableFaqRule": "본문 전체가 Q1~Q7 FAQ 구조(마지막 문항에서 기업 집중 소개) + 팬아웃 추천 질문 10개 토글 제공",
+      "oneLineRule": "\"한 줄 요약!\"으로 시작하는 1~2문장",
+      "noticeRule": "본 콘텐츠는 매경비즈 디지털뉴스룸(또는 콘텐츠·기획팀)이 공식 발표 자료와 보도자료를 바탕으로 작성했습니다.",
+      "captionRule": "< 출처 : 업체명 > 또는 \"본 사진은 기사의 이해를 돕기 위해 생성형 AI로 제작되었습니다\"",
+      "lengthRange": "공백 포함 3,400~4,200자 / Q1~Q7 7개 문답 블록 (상한 없음)",
+      "references": "도씨 (6/26), 번개장터 (6/16)",
+      "updatedAt": "2026-10-22 09:00",
+      "updatedBy": "editor@mk.co.kr"
+    }
+  ],
+  "works": [
+    {
+      "id": "work-1792975128945",
+      "userId": "user-1",
+      "title": "\"빼빼로데이가 글로벌 축제로\"…롯데웰푸드, 스트레이 키즈·산리오 시즌 패키지 확대",
+      "keyword": "빼빼로데이",
+      "inputUrl": "",
+      "inputCompany": "",
+      "rawText": "",
+      "typeId": 2,
+      "createdAt": "2026-10-26T00:38:48.945Z",
+      "updatedAt": "2026-10-26 00:38",
+      "geoChecks": [
+        {
+          "id": "geo-1",
+          "title": "인용구(\" \") + 말줄임(…) 헤드라인 & 핵심 키워드 전면 배치",
+          "desc": "AI와 검색엔진이 주제를 즉시 파악하도록 큰따옴표 인용구와 핵심 키워드를 제목에 포함했나요?",
+          "checked": true
+        },
+        {
+          "id": "geo-2",
+          "title": "상단 [AI 팩트 체크 요약] 1~3번 구성",
+          "desc": "생성형 AI가 기사의 핵심 결론을 3줄로 바로 발췌·인용할 수 있도록 상단 요약 번호(1~3)를 채웠나요?",
+          "checked": true
+        },
+        {
+          "id": "geo-3",
+          "title": "독자 질문형 도입부 (\"~하신 적 없으신가요?\")",
+          "desc": "독자의 검색 의도(Search Intent)와 공감대를 자극하는 질문형 문장으로 도입부를 시작했나요?",
+          "checked": true
+        },
+        {
+          "id": "geo-4",
+          "title": "구체적 수치 · 날짜 · 고유명사(엔티티) 포함",
+          "desc": "모호한 수식어 대신 정확한 기업·브랜드·법령명과 수치(금액, %, 일자, 수량)가 본문에 명시되었나요?",
+          "checked": true
+        },
+        {
+          "id": "geo-5",
+          "title": "구조화된 비교 [요약표] 포함",
+          "desc": "AI 답변 엔진이 표 데이터를 그대로 인용할 수 있도록 행·열이 정리된 비교 요약표를 넣었나요?",
+          "checked": true
+        },
+        {
+          "id": "geo-6",
+          "title": "실제 검색 질문 기반 [FAQ] 5문항 이상 구성 (AEO)",
+          "desc": "사용자가 퍼플렉시티·챗GPT에 직접 물어볼 법한 질문(Q)과 완결된 답변(A)을 구성했나요?",
+          "checked": true
+        },
+        {
+          "id": "geo-7",
+          "title": "\"한 줄 요약!\" 마무리 및 전 문장 \"~합니다\" 체 통일",
+          "desc": "하단에 \"한 줄 요약!\" 문장을 넣고, 본문과 FAQ 답변을 신뢰감 있는 \"~합니다\" 체로 통일했나요?",
+          "checked": true
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-live-1",
+          "url": "https://news.google.com/rss/articles/CBMiaEFVX3lxTE1aWDFuTC1tV054aVRBNGQzV3dGZlNPd0U1TDRZVU9JZERDZXNUYlZOZ2RyaVRDNm5hRzRjV3VBemYyWGl6UnRxYmZDRE1tWXIxeTJ0bUJRcXF6VmVGVEU2cHFPaEVDTGg1?oc=5",
+          "title": "[참고 보도 · 녹색경제신문] 올해 '빼빼로데이'는 스트레이 키즈와 함께... 롯데웰푸드, 시즌 패키지 출시",
+          "method": "실시간 트렌드 수집",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-live-2",
+          "url": "https://news.google.com/rss/articles/CBMiX0FVX3lxTE9ja0U3YlF1dzJ5ZjVTbzF6N2F2MnF4Qkw5QmhrOHFSQVd2M2RVMUNiSnZ3aGhKVHI5TnE3NmpWdXF3YTB2ZHRIMnc0UWJKQzBGcGlpU1NiOEp4UWFkdGpB?oc=5",
+          "title": "[참고 보도 · 뉴스1] 빼빼로데이 한 달 앞으로…편의점업계, 캐릭터·굿즈 경쟁 시동",
+          "method": "실시간 트렌드 수집",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-live-3",
+          "url": "https://news.google.com/rss/articles/CBMic0FVX3lxTE1iSExBWW1LOEhoMnF2MndzZWFEWUVjZ25kQlF0SDIydjZOaVNLS0FILTlLdk82ZUhDQWdsUVNFZ0ZHN2ktWmZCMXByT0hteXo4ZGV3ek4tTktYUWtMbmFfV2tvUkZIQmFaRGphYTYxMjVDNGPSAXdBVV95cUxQMlNsNjVXQWtzZk1kTm1ZOWtJY0Q0eG1HajRZMXRzeEN3V0NzMTF3UDZ3VExsa2s0dVZKWDRmLXpVQlI4STNsUEp4dDg3aUVOQlRERy0zMXJzVHRLaHFqSjhHb2dNem9LMkozTlFqb2tHS293QWF4bw?oc=5",
+          "title": "[참고 보도 · 스트레이트뉴스] 롯데웰푸드, 빼빼로데이 맞아 스트레이 키즈·산리오 IP 패키지 10종 출시",
+          "method": "실시간 트렌드 수집",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-live-4",
+          "url": "https://news.google.com/rss/articles/CBMiY0FVX3lxTE4taWdEOUNUMzQtaWVCRWpfaThybHEyVGxwZDVqT3p0NERJRk1LWGI2VDBkVEtzV1NqNEk2aElMSTZ2ekplR0NaRFVITlhGWFNwaFJuOXV2bWdTWUdmMG9QX0t5NA?oc=5",
+          "title": "[참고 보도 · 더구루] 롯데웰푸드, 스트레이 키즈 앞세워 ’빼빼로데이‘ 해외 고삐 당긴다",
+          "method": "실시간 트렌드 수집",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-live-5",
+          "url": "https://news.google.com/rss/articles/CBMibEFVX3lxTE9hSW1NUHg0SUZPM3BNTmV6bWw1enk2ZEU5NW53VzFvZHBDWDZUVDRWN1Q4MGxFdnZCbUk1Qm44dlJaMkNONUJNZTk1M0NwZ3JyX1ZNekx0OVNMRlFoaXhwT0U5cGh0Zjd5VWFTZg?oc=5",
+          "title": "[참고 보도 · 비즈워치] 롯데웰푸드, '빼빼로데이' 글로벌 행사로 키운다",
+          "method": "실시간 트렌드 수집",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-live-6",
+          "url": "https://www.youtube.com/shorts/DW5B98aE3YU",
+          "title": "[참고 보도 · 유튜브 쇼츠(Shorts)] 빼빼로데이에 빼빼로를 빼앗겼다",
+          "method": "실시간 트렌드 수집",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-pplx-1",
+          "url": "https://www.newsis.com/view/NISX20261014_0003825066",
+          "title": "[Perplexity 실시간 검증 출처 #1] https://www.newsis.com/view/NISX20261014_0003825066",
+          "method": "Perplexity 실시간 검색",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-pplx-2",
+          "url": "https://www.ekn.kr/web/view.php?key=20261014025496051",
+          "title": "[Perplexity 실시간 검증 출처 #2] https://www.ekn.kr/web/view.php?key=20261014025496051",
+          "method": "Perplexity 실시간 검색",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-pplx-3",
+          "url": "https://www.mt.co.kr/living/2026/10/14/2026101409355484136",
+          "title": "[Perplexity 실시간 검증 출처 #3] https://www.mt.co.kr/living/2026/10/14/2026101409355484136",
+          "method": "Perplexity 실시간 검색",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-pplx-4",
+          "url": "https://www.cstimes.com/news/articleView.html?idxno=723883",
+          "title": "[Perplexity 실시간 검증 출처 #4] https://www.cstimes.com/news/articleView.html?idxno=723883",
+          "method": "Perplexity 실시간 검색",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-pplx-5",
+          "url": "https://www.fnnews.com/news/202610140856141009",
+          "title": "[Perplexity 실시간 검증 출처 #5] https://www.fnnews.com/news/202610140856141009",
+          "method": "Perplexity 실시간 검색",
+          "reliability": "높음",
+          "excluded": false
+        }
+      ],
+      "researchItems": [
+        {
+          "id": "ri-pplx-1",
+          "category": "시즌 제품",
+          "fact": "롯데웰푸드는 11월 11일 빼빼로데이를 앞두고 시즌 패키지 10종을 선보입니다.",
+          "rawReference": "Perplexity 실시간 웹 검색 및 매경 문체 재가공",
+          "sourceIds": [
+            "src-live-1"
+          ]
+        },
+        {
+          "id": "ri-pplx-2",
+          "category": "IP 협업",
+          "fact": "전체 시즌 패키지 가운데 스트레이 키즈, 산리오캐릭터즈, 가나디와 협업한 제품은 7종입니다.",
+          "rawReference": "Perplexity 실시간 웹 검색 및 매경 문체 재가공",
+          "sourceIds": [
+            "src-live-2"
+          ]
+        },
+        {
+          "id": "ri-pplx-3",
+          "category": "제품 구성",
+          "fact": "스트레이 키즈 협업 제품은 아몬드와 화이트쿠키 2종이며, 산리오캐릭터즈 협업 제품은 초코·크런키·어쏘트 등 4종입니다.",
+          "rawReference": "Perplexity 실시간 웹 검색 및 매경 문체 재가공",
+          "sourceIds": [
+            "src-live-3"
+          ]
+        },
+        {
+          "id": "ri-pplx-4",
+          "category": "구매 혜택",
+          "fact": "일부 제품에는 캐릭터 스티커와 책갈피 등 굿즈가 동봉되며, 빼빼로 3만원 이상 구매 시 별도 증정품을 제공하는 판촉도 진행됩니다.",
+          "rawReference": "Perplexity 실시간 웹 검색 및 매경 문체 재가공",
+          "sourceIds": [
+            "src-live-4"
+          ]
+        }
+      ],
+      "titleCandidates": [
+        {
+          "id": "tc-1",
+          "title": "\"빼빼로데이가 글로벌 축제로\"…롯데웰푸드, 스트레이 키즈·산리오 시즌 패키지 확대",
+          "totalScore": 96
+        },
+        {
+          "id": "tc-2",
+          "title": "\"과자보다 굿즈\"…빼빼로데이 겨냥한 캐릭터·IP 마케팅 경쟁",
+          "totalScore": 93
+        },
+        {
+          "id": "tc-3",
+          "title": "\"11월 11일을 잡아라\"…롯데웰푸드 빼빼로 시즌 제품 10종 출시",
+          "totalScore": 90
+        },
+        {
+          "id": "tc-4",
+          "title": "\"스트레이 키즈부터 산리오까지\"…빼빼로데이 선물 수요 정조준",
+          "totalScore": 88
+        },
+        {
+          "id": "tc-5",
+          "title": "\"빼빼로데이 마케팅 달라졌다\"…한정판 패키지·캐릭터 굿즈 총출동",
+          "totalScore": 85
+        }
+      ],
+      "selectedTitleId": "tc-1",
+      "draftSections": [
+        {
+          "id": "sec-1",
+          "title": "왜 11월 11일은 과자를 주고받는 날이 됐을까요?",
+          "subtitle": "",
+          "content": "매년 11월 11일, 가족과 친구에게 막대 모양 과자를 선물하신 적 없으신가요? 빼빼로데이는 숫자 1이 네 번 반복되는 날짜와 막대 과자의 형태가 맞물리며 대중적으로 확산된 국내 소비 문화입니다.\n\n다만 빼빼로데이는 국가가 지정한 법정기념일이 아니라 기업과 소비자가 함께 만든 시즌성 기념일에 가깝습니다. 롯데웰푸드는 이 날을 대표적인 선물 수요 시기로 키우며 매년 한정 패키지, 캐릭터 협업, 구매 금액별 증정품을 선보이고 있습니다.",
+          "sourceIds": [
+            "src-live-1",
+            "src-live-2"
+          ]
+        },
+        {
+          "id": "sec-2",
+          "title": "올해 빼빼로데이에는 어떤 기업 혜택과 공식 지원을 확인해야 하나요?",
+          "subtitle": "",
+          "content": "빼빼로데이처럼 기업이 자체적으로 기획하는 시즌 행사는 정부나 지방자치단체가 운영하는 공식 기념일 지원 사업과 구분해 살펴봐야 합니다. 정부·지자체의 소상공인 지원금, 지역사랑상품권, 전통시장 바우처 등은 사업별 대상과 사용처가 다르므로 해당 기관의 공고와 사용 기한을 확인해야 합니다.\n\n기업별 프로모션은 판매처와 기간, 재고에 따라 혜택이 달라집니다. 특히 한정 패키지와 굿즈 증정은 정상 판매 제품과 별도 조건이 적용될 수 있어 구매 전 행사 매장, 최소 구매 금액, 증정품 소진 여부를 확인하는 것이 안전합니다.",
+          "sourceIds": [
+            "src-live-1",
+            "src-live-2"
+          ]
+        },
+        {
+          "id": "sec-3",
+          "title": "올해 빼빼로데이를 겨냥한 브랜드별 제품과 혜택은 무엇인가요?",
+          "subtitle": "",
+          "content": "■ 롯데웰푸드 ‘스트레이 키즈 협업 빼빼로’ 캠페인·제품·마케팅\n롯데웰푸드는 글로벌 앰배서더 스트레이 키즈의 이미지를 적용한 아몬드와 화이트쿠키 기획 패키지 2종을 출시합니다. 한류 팬덤과 선물 수요를 동시에 겨냥한 구성으로, 일부 판매 행사에서는 빼빼로 3만원 이상 구매 고객에게 스트레이 키즈 타포린백과 키링을 증정합니다.\n\n■ 롯데웰푸드 ‘산리오캐릭터즈 온팩’ 캠페인·제품·마케팅\n헬로키티, 포차코, 시나모롤, 한교동을 활용한 초코·크런키·어쏘트 등 4종을 선보입니다. 패키지에 캐릭터 스티커와 책갈피를 더해 어린이와 캐릭터 팬을 위한 수집형 선물 상품으로 구성했습니다.\n\n■ 롯데웰푸드 ‘가나디 어쏘트 5입’ 캠페인·제품·마케팅\n인기 캐릭터 가나디와 협업한 어쏘트 5입 제품도 시즌 라인업에 포함됩니다. 캐릭터 디자인과 굿즈를 결합해 여러 사람에게 나눠 주기 좋은 묶음형 선물 수요를 공략합니다.\n\n■ 롯데웰푸드 ‘더블리치 솔티바닐라’ 캠페인·제품·마케팅\n올해 상반기 시즌 한정으로 선보였던 프리미엄 제품 빼빼로 더블리치 솔티바닐라는 빼빼로데이 시즌에 맞춰 한정 재출시됩니다. 기존 기본 제품과 차별화된 맛과 프리미엄 이미지를 앞세워 성인 선물 수요를 겨냥합니다.",
+          "sourceIds": [
+            "src-live-1",
+            "src-live-2"
+          ]
+        }
+      ],
+      "summaryBlocks": {
+        "mkCategory": "기업뉴스",
+        "mkCategoryReason": "빼빼로데이를 계기로 여러 기업과 브랜드가 시즌 제품과 협업 마케팅을 전개하는 흐름을 종합적으로 다루기 때문에 기업뉴스가 적합합니다.",
+        "byline": "기업뉴스 | 남궁선희 기자 | 입력 2026.10.26 10:00",
+        "companyTags": [
+          "빼빼로데이"
+        ],
+        "subtitle": "11월 11일 빼빼로데이 앞두고 시즌 패키지와 인기 IP 협업 확대\n제품 판매를 넘어 캐릭터 굿즈·글로벌 앰배서더로 선물 수요 공략합니다",
+        "aiFactSummary": [
+          "롯데웰푸드는 빼빼로데이 시즌을 맞아 총 10종의 한정 패키지를 출시합니다.",
+          "스트레이 키즈, 산리오캐릭터즈, 가나디 등 인기 IP를 활용한 협업 제품은 7종으로 구성됩니다.",
+          "산리오캐릭터즈와 가나디 제품에는 스티커와 책갈피가 포함되며, 일부 구매 금액별 증정 행사도 마련됩니다."
+        ],
+        "summaryTable": {
+          "title": "[요약표] 빼빼로데이 시즌 브랜드별 제품·혜택 비교",
+          "headers": [
+            "브랜드·캠페인",
+            "제품·혜택",
+            "참여조건",
+            "기간"
+          ],
+          "rows": [
+            [
+              "롯데웰푸드·스트레이 키즈",
+              "아몬드·화이트쿠키 협업 패키지, 일부 구매 시 타포린백·키링 증정",
+              "판매처별 구매 금액 조건 적용",
+              "빼빼로데이 시즌"
+            ],
+            [
+              "롯데웰푸드·산리오캐릭터즈",
+              "초코·크런키·어쏘트 4종, 캐릭터 스티커·책갈피 동봉",
+              "제품 구매 및 굿즈 재고 소진 전 참여",
+              "빼빼로데이 시즌"
+            ],
+            [
+              "롯데웰푸드·가나디",
+              "가나디 어쏘트 5입, 캐릭터 굿즈 구성",
+              "판매처별 재고와 증정 조건 확인",
+              "빼빼로데이 시즌"
+            ],
+            [
+              "롯데웰푸드·더블리치 솔티바닐라",
+              "프리미엄 시즌 한정 제품 재출시",
+              "판매처별 판매 수량 적용",
+              "빼빼로데이 시즌"
+            ]
+          ]
+        },
+        "faqs": [
+          {
+            "q": "Q1. 올해 빼빼로데이는 언제이고 어떤 제품이 나오나요?",
+            "a": "빼빼로데이는 매년 11월 11일이며, 롯데웰푸드는 올해 시즌 패키지 10종을 출시합니다. 스트레이 키즈 2종, 산리오캐릭터즈 4종, 가나디 어쏘트 5입 등이 주요 협업 제품입니다."
+          },
+          {
+            "q": "Q2. 스트레이 키즈 빼빼로 굿즈는 얼마를 사야 받을 수 있나요?",
+            "a": "일부 판촉 행사에서는 빼빼로를 3만원 이상 구매하면 스트레이 키즈 타포린백과 키링을 증정합니다. 매장별 재고와 행사 기간이 다를 수 있으므로 구매 전 증정품 보유 여부를 확인해야 합니다."
+          },
+          {
+            "q": "Q3. 산리오 빼빼로에는 어떤 캐릭터와 굿즈가 들어 있나요?",
+            "a": "헬로키티, 포차코, 시나모롤, 한교동을 활용한 4종 패키지가 출시됩니다. 제품에 따라 캐릭터 스티커와 책갈피가 포함되며, 굿즈는 재고 소진 시 종료될 수 있습니다."
+          },
+          {
+            "q": "Q4. 빼빼로데이는 정부가 지정한 법정기념일인가요?",
+            "a": "빼빼로데이는 11월 11일에 기업과 소비자가 만들어 온 시즌성 기념일로 소비됩니다. 정부·지자체 지원금이나 상품권을 이용하려면 빼빼로데이 행사와 별도로 각 사업의 대상, 사용처, 기간을 확인해야 합니다."
+          },
+          {
+            "q": "Q5. 빼빼로데이 선물은 어떤 제품을 고르면 좋을까요?",
+            "a": "아이와 캐릭터 팬에게는 산리오캐릭터즈나 가나디 제품이, 아이돌 팬에게는 스트레이 키즈 협업 제품이 적합합니다. 성인 선물에는 프리미엄 한정 제품인 더블리치 솔티바닐라를 고려할 수 있습니다."
+          }
+        ],
+        "fanoutQuestions": [
+          {
+            "id": "fq-pplx-1",
+            "category": "예약·대기",
+            "q": "빼빼로데이 한정 제품은 사전 예약 없이 매장에서 바로 살 수 있나요?",
+            "a": "대부분의 제품은 편의점과 대형마트 등 일반 판매처에서 구매할 수 있습니다. 다만 협업 패키지와 굿즈 증정품은 입고 수량이 제한될 수 있어 11월 11일 전후에는 매장별 재고를 먼저 확인하는 것이 좋습니다."
+          },
+          {
+            "id": "fq-pplx-2",
+            "category": "가격·혜택",
+            "q": "무료 굿즈나 추가 선물을 받으려면 빼빼로를 얼마 이상 사야 하나요?",
+            "a": "일부 행사에서는 빼빼로 3만원 이상 구매 시 스트레이 키즈 타포린백과 키링을 증정합니다. 증정 조건과 대상 품목은 판매처별로 달라질 수 있으므로 결제 전에 행사 안내를 확인해야 합니다."
+          },
+          {
+            "id": "fq-pplx-3",
+            "category": "위치·교통",
+            "q": "빼빼로데이 제품은 어디에서 가장 쉽게 구할 수 있나요?",
+            "a": "편의점, 대형마트, 온라인몰 등 롯데웰푸드 제품을 취급하는 유통 채널에서 판매될 가능성이 높습니다. 특정 매장의 재고와 주차 정보는 방문 전 해당 유통사의 앱이나 매장 안내에서 확인하는 것이 효율적입니다."
+          },
+          {
+            "id": "fq-pplx-4",
+            "category": "구매·수량제한",
+            "q": "스트레이 키즈나 산리오 한정판은 1인당 구매 수량 제한이 있나요?",
+            "a": "제공된 행사 정보에는 공통적인 1인당 구매 수량이 제시되지 않았습니다. 인기 제품은 판매처가 자체적으로 수량을 제한하거나 조기 품절될 수 있어 구매 전 매장별 공지를 확인해야 합니다."
+          },
+          {
+            "id": "fq-pplx-5",
+            "category": "동반·선물팁",
+            "q": "아이와 함께 고르거나 연인·친구에게 선물하기 좋은 제품은 무엇인가요?",
+            "a": "아이와 캐릭터를 좋아하는 사람에게는 산리오캐릭터즈와 가나디 제품이 적합하며, 아이돌 팬에게는 스트레이 키즈 협업 패키지가 어울립니다. 여러 명에게 나눠 줄 선물이라면 가나디 어쏘트 5입처럼 묶음형 제품을 고려할 수 있습니다."
+          },
+          {
+            "id": "fq-pplx-6",
+            "category": "차별점·비교",
+            "q": "이번 빼빼로데이 제품은 일반 빼빼로와 무엇이 다른가요?",
+            "a": "이번 시즌 제품은 일반 포장보다 스트레이 키즈, 산리오캐릭터즈, 가나디 등 인기 IP를 전면에 내세운 점이 특징입니다. 전체 시즌 패키지 10종 중 7종이 협업 온팩으로 구성돼 캐릭터와 굿즈 수집 요소를 강화했습니다."
+          },
+          {
+            "id": "fq-pplx-7",
+            "category": "온라인·앱연동",
+            "q": "매장에 가지 않고 빼빼로데이 한정 제품을 온라인으로 살 수 있나요?",
+            "a": "온라인몰에서도 시즌 제품이 판매될 수 있지만 입점 채널과 재고, 증정 조건은 판매처마다 다릅니다. 온라인 구매 전 협업 패키지 포함 여부와 굿즈 증정 조건, 배송 일정을 함께 확인해야 합니다."
+          },
+          {
+            "id": "fq-pplx-8",
+            "category": "후속일정·주의사항",
+            "q": "빼빼로데이 시즌이 끝난 뒤에도 한정 제품을 살 수 있나요?",
+            "a": "시즌 패키지와 굿즈는 한정 판매 성격이 강해 11월 11일 이후에는 재고가 빠르게 줄어들 수 있습니다. 이후에도 구매하려면 롯데웰푸드 공식 채널과 주요 유통사 판매 페이지에서 재고와 후속 일정을 확인하는 것이 좋습니다."
+          }
+        ],
+        "oneLineSummary": "롯데웰푸드가 11월 11일 빼빼로데이를 겨냥해 스트레이 키즈·산리오캐릭터즈·가나디 협업을 포함한 시즌 패키지 10종을 선보이며 캐릭터 굿즈와 글로벌 마케팅을 강화합니다.",
+        "noticeText": "본 콘텐츠는 매경비즈 디지털뉴스룸이 공식 발표 자료와 보도자료를 바탕으로 작성했습니다.",
+        "imageRecommendations": [
+          {
+            "position": "상단 대표 이미지",
+            "sourceUrl": "https://www.mk.co.kr",
+            "keywords": [
+              "빼빼로데이 공식 이미지",
+              "빼빼로데이 현장·제품 사진"
+            ],
+            "caption": "< 출처 : 각 사 제공 >"
+          }
+        ]
+      },
+      "factChecks": [
+        {
+          "id": "fc-auto-1",
+          "sentence": "매년 11월 11일, 가족과 친구에게 막대 모양 과자를 선물하신 적 없으신가요?",
+          "verdict": "수치·팩트 확인",
+          "sourceId": "src-live-1",
+          "sourceTitle": "[참고 보도 · 녹색경제신문] 올해 '빼빼로데이'는 스트레이 키즈와 함께... 롯데웰푸드, 시즌 패키지 출시",
+          "sourceUrl": "https://news.google.com/rss/articles/CBMiaEFVX3lxTE1aWDFuTC1tV054aVRBNGQzV3dGZlNPd0U1TDRZVU9JZERDZXNUYlZOZ2RyaVRDNm5hRzRjV3VBemYyWGl6UnRxYmZDRE1tWXIxeTJ0bUJRcXF6VmVGVEU2cHFPaEVDTGg1?oc=5",
+          "status": "미처리"
+        },
+        {
+          "id": "fc-auto-2",
+          "sentence": "롯데웰푸드는 글로벌 앰배서더 스트레이 키즈의 이미지를 적용한 아몬드와 화이트쿠키 기획 패키지 2종을 출시합니다.",
+          "verdict": "수치·팩트 확인",
+          "sourceId": "src-live-1",
+          "sourceTitle": "[참고 보도 · 녹색경제신문] 올해 '빼빼로데이'는 스트레이 키즈와 함께... 롯데웰푸드, 시즌 패키지 출시",
+          "sourceUrl": "https://news.google.com/rss/articles/CBMiaEFVX3lxTE1aWDFuTC1tV054aVRBNGQzV3dGZlNPd0U1TDRZVU9JZERDZXNUYlZOZ2RyaVRDNm5hRzRjV3VBemYyWGl6UnRxYmZDRE1tWXIxeTJ0bUJRcXF6VmVGVEU2cHFPaEVDTGg1?oc=5",
+          "status": "미처리"
+        },
+        {
+          "id": "fc-auto-3",
+          "sentence": "한류 팬덤과 선물 수요를 동시에 겨냥한 구성으로, 일부 판매 행사에서는 빼빼로 3만원 이상 구매 고객에게 스트레이 키즈 타포린백과 키링을 증정합니다.",
+          "verdict": "수치·팩트 확인",
+          "sourceId": "src-live-1",
+          "sourceTitle": "[참고 보도 · 녹색경제신문] 올해 '빼빼로데이'는 스트레이 키즈와 함께... 롯데웰푸드, 시즌 패키지 출시",
+          "sourceUrl": "https://news.google.com/rss/articles/CBMiaEFVX3lxTE1aWDFuTC1tV054aVRBNGQzV3dGZlNPd0U1TDRZVU9JZERDZXNUYlZOZ2RyaVRDNm5hRzRjV3VBemYyWGl6UnRxYmZDRE1tWXIxeTJ0bUJRcXF6VmVGVEU2cHFPaEVDTGg1?oc=5",
+          "status": "미처리"
+        },
+        {
+          "id": "fc-auto-4",
+          "sentence": "헬로키티, 포차코, 시나모롤, 한교동을 활용한 초코·크런키·어쏘트 등 4종을 선보입니다.",
+          "verdict": "수치·팩트 확인",
+          "sourceId": "src-live-1",
+          "sourceTitle": "[참고 보도 · 녹색경제신문] 올해 '빼빼로데이'는 스트레이 키즈와 함께... 롯데웰푸드, 시즌 패키지 출시",
+          "sourceUrl": "https://news.google.com/rss/articles/CBMiaEFVX3lxTE1aWDFuTC1tV054aVRBNGQzV3dGZlNPd0U1TDRZVU9JZERDZXNUYlZOZ2RyaVRDNm5hRzRjV3VBemYyWGl6UnRxYmZDRE1tWXIxeTJ0bUJRcXF6VmVGVEU2cHFPaEVDTGg1?oc=5",
+          "status": "미처리"
+        }
+      ],
+      "liveNewsCount": 6,
+      "usedPerplexity": true
+    },
+    {
+      "id": "work-1792974712034",
+      "userId": "user-1",
+      "title": "\"패션 팝업에 라면 부스\"…농심·무신사, 오사카서 K콘텐츠 접점 넓힙니다",
+      "keyword": "신라면 오사카 팝업",
+      "inputUrl": "",
+      "inputCompany": "",
+      "rawText": "",
+      "typeId": 4,
+      "createdAt": "2026-10-26T00:31:52.034Z",
+      "updatedAt": "2026-10-26 00:33",
+      "geoChecks": [
+        {
+          "id": "geo-1",
+          "title": "인용구(\" \") + 말줄임(…) 헤드라인 & 핵심 키워드 전면 배치",
+          "desc": "AI와 검색엔진이 주제를 즉시 파악하도록 큰따옴표 인용구와 핵심 키워드를 제목에 포함했나요?",
+          "checked": true
+        },
+        {
+          "id": "geo-2",
+          "title": "상단 [AI 팩트 체크 요약] 1~3번 구성",
+          "desc": "생성형 AI가 기사의 핵심 결론을 3줄로 바로 발췌·인용할 수 있도록 상단 요약 번호(1~3)를 채웠나요?",
+          "checked": true
+        },
+        {
+          "id": "geo-3",
+          "title": "독자 질문형 도입부 (\"~하신 적 없으신가요?\")",
+          "desc": "독자의 검색 의도(Search Intent)와 공감대를 자극하는 질문형 문장으로 도입부를 시작했나요?",
+          "checked": true
+        },
+        {
+          "id": "geo-4",
+          "title": "구체적 수치 · 날짜 · 고유명사(엔티티) 포함",
+          "desc": "모호한 수식어 대신 정확한 기업·브랜드·법령명과 수치(금액, %, 일자, 수량)가 본문에 명시되었나요?",
+          "checked": true
+        },
+        {
+          "id": "geo-5",
+          "title": "구조화된 비교 [요약표] 포함",
+          "desc": "AI 답변 엔진이 표 데이터를 그대로 인용할 수 있도록 행·열이 정리된 비교 요약표를 넣었나요?",
+          "checked": true
+        },
+        {
+          "id": "geo-6",
+          "title": "실제 검색 질문 기반 [FAQ] 5문항 이상 구성 (AEO)",
+          "desc": "사용자가 퍼플렉시티·챗GPT에 직접 물어볼 법한 질문(Q)과 완결된 답변(A)을 구성했나요?",
+          "checked": true
+        },
+        {
+          "id": "geo-7",
+          "title": "\"한 줄 요약!\" 마무리 및 전 문장 \"~합니다\" 체 통일",
+          "desc": "하단에 \"한 줄 요약!\" 문장을 넣고, 본문과 FAQ 답변을 신뢰감 있는 \"~합니다\" 체로 통일했나요?",
+          "checked": true
+        }
+      ],
+      "sources": [
+        {
+          "id": "src-live-1",
+          "url": "https://news.google.com/rss/articles/CBMiZEFVX3lxTFBtM245Z2R4RFpMR2lfWjI0bHBGTXpLdkdoV19mMC1EcExBMGc3UlZBd0t4Y2tzOGpHRVZFZ014YTBIQ0JfYzZYaEdrYW0yS0xuWEhLWG5fUlZlU21KYVQ1TzBNNkY?oc=5",
+          "title": "[참고 보도 · 매일일보] 농심, 무신사와 손잡고 일본서 신라면 알린다…오사카 팝업 운영",
+          "method": "실시간 트렌드 수집",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-live-2",
+          "url": "https://news.google.com/rss/articles/CBMiakFVX3lxTE5uellrcnRhNUtaQ1EtN29mZ3pUclA3YkVvVldtMmxydkQ4Qk5fUXY2clMyM3I4Sk1pMzJaNUJNaXRjQjNSY080WEhpWng0ckRiQTFlQjdDVDFpaEZDb0liLUw4a3l3RUtVZEE?oc=5",
+          "title": "[참고 보도 · 천지일보] “K-패션 보러 왔다가 신라면까지”… 농심, 무신사 오사카 팝업서 신라면 툼바 알린다",
+          "method": "실시간 트렌드 수집",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-live-3",
+          "url": "https://news.google.com/rss/articles/CBMibkFVX3lxTE13eWtaLVdTb25yT1E5SEx2dEVNc08zbEF3UTk5T1htLU4tVC0xSGhubTdNUGlidHBQOGFibGdJNGgzeEtVd2kxbFF1dWVjSnRRYmJTOEpXc0FRWmEzZnZlOE5tNnZJWkEyT211X1NR?oc=5",
+          "title": "[참고 보도 · 식품저널 foodnews] 오사카 무신사 팝업서 갓 끓인 ‘신라면 툼바’ 맛본다",
+          "method": "실시간 트렌드 수집",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-live-4",
+          "url": "https://news.google.com/rss/articles/CBMiY0FVX3lxTE1GVGxsQnc2NWYyQkVmNHZLZmdGWEFheXh0cGFzUHhLY2xiQk9vbjFCbjRReVota2Znc1V4Y21jRUhZS3RwZGQ4eHlRejdkTmNHcHcxOTdpZlZtZl93eDJFY19vZw?oc=5",
+          "title": "[참고 보도 · 더구루] 농심 '신라면', 무신사 간사이 팝업서 데뷔…K푸드·패션 컬래버",
+          "method": "실시간 트렌드 수집",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-live-5",
+          "url": "https://news.google.com/rss/articles/CBMiiwFBVV95cUxPaVR5bFJ6dEVTLWZNdjRmSVZiM0JRQmtKQ0FOc2Q1QXhIQlo0aElLTHFkWEp2TWZCaW0wazB1VExrX1ZsQU9Ta0tQeWxTUFBuS0RuR0UtOVVHQW02QTR6VEJCbGZFdHg5Y196RFVxWE9UeHlRY1pPUmtsMmVNckpFVUJaSG0tWHB2U19J?oc=5",
+          "title": "[참고 보도 · 글로벌이코노믹] K패션에 K푸드 더했다…농심, 무신사 오사카 팝업서 신라면 알린다",
+          "method": "실시간 트렌드 수집",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-pplx-1",
+          "url": "https://www.yna.co.kr/view/AKR20261023032100030?section=international/japan",
+          "title": "[Perplexity 실시간 검증 출처 #1] https://www.yna.co.kr/view/AKR20261023032100030?section=international/japan",
+          "method": "Perplexity 실시간 검색",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-pplx-2",
+          "url": "https://www.joseilbo.com/news/htmls/2026/10/20261023578005.html",
+          "title": "[Perplexity 실시간 검증 출처 #2] https://www.joseilbo.com/news/htmls/2026/10/20261023578005.html",
+          "method": "Perplexity 실시간 검색",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-pplx-3",
+          "url": "https://newspim.com/news/view/20261023000153",
+          "title": "[Perplexity 실시간 검증 출처 #3] https://newspim.com/news/view/20261023000153",
+          "method": "Perplexity 실시간 검색",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-pplx-4",
+          "url": "https://www.dailian.co.kr/news/view/1705126/%EB%86%8D%EC%8B%AC-%EB%AC%B4%EC%8B%A0%EC%82%AC-%EC%9D%BC%EB%B3%B8-%ED%8C%9D%EC%97%85%EC%84%9C-%EC%8B%A0%EB%9D%BC%EB%A9%B4-%EB%B6%80%EC%8A%A4-2026",
+          "title": "[Perplexity 실시간 검증 출처 #4] https://www.dailian.co.kr/news/view/1705126/%EB%86%8D%EC%8B%AC-%EB%AC%B4%EC%8B%A0%EC%82%AC-%EC%9D%BC%EB%B3%B8-%ED%8C%9D%EC%97%85%EC%84%9C-%EC%8B%A0%EB%9D%BC%EB%A9%B4-%EB%B6%80%EC%8A%A4-2026",
+          "method": "Perplexity 실시간 검색",
+          "reliability": "높음",
+          "excluded": false
+        },
+        {
+          "id": "src-pplx-5",
+          "url": "https://www.businesspost.co.kr/BP?command=mobile_view&num=450128",
+          "title": "[Perplexity 실시간 검증 출처 #5] https://www.businesspost.co.kr/BP?command=mobile_view&num=450128",
+          "method": "Perplexity 실시간 검색",
+          "reliability": "높음",
+          "excluded": false
+        }
+      ],
+      "researchItems": [
+        {
+          "id": "ri-pplx-2",
+          "category": "시식 프로그램",
+          "fact": "현장에서는 즉석 라면조리기를 활용해 한국의 이른바 한강라면 방식으로 조리한 신라면 툼바를 제공합니다.",
+          "rawReference": "Perplexity 실시간 웹 검색 및 매경 문체 재가공",
+          "sourceIds": [
+            "src-live-2"
+          ]
+        },
+        {
+          "id": "ri-pplx-3",
+          "category": "참여 조건",
+          "fact": "농심재팬 공식 인스타그램을 팔로우한 방문객은 신라면 툼바 시식에 참여할 수 있습니다.",
+          "rawReference": "Perplexity 실시간 웹 검색 및 매경 문체 재가공",
+          "sourceIds": [
+            "src-live-3"
+          ]
+        },
+        {
+          "id": "ri-pplx-4",
+          "category": "증정 혜택",
+          "fact": "시식 후 설문조사에 응한 방문객에게는 신라면 로제를 증정합니다.",
+          "rawReference": "Perplexity 실시간 웹 검색 및 매경 문체 재가공",
+          "sourceIds": [
+            "src-live-4"
+          ]
+        }
+      ],
+      "titleCandidates": [
+        {
+          "id": "tc-1",
+          "title": "\"K패션 보러 왔다가 신라면까지\"…농심, 무신사 오사카 팝업서 K푸드 알립니다",
+          "totalScore": 96
+        },
+        {
+          "id": "tc-2",
+          "title": "\"한강라면처럼 즐긴다\"…농심 신라면 툼바, 일본 무신사 팝업 공략합니다",
+          "totalScore": 93
+        },
+        {
+          "id": "tc-3",
+          "title": "\"패션 팝업에 라면 부스\"…농심·무신사, 오사카서 K콘텐츠 접점 넓힙니다",
+          "totalScore": 90
+        },
+        {
+          "id": "tc-4",
+          "title": "\"갓 끓인 신라면 툼바 맛보세요\"…농심, 오사카 우메다서 체험 마케팅 펼칩니다",
+          "totalScore": 88
+        },
+        {
+          "id": "tc-5",
+          "title": "\"71개 브랜드와 함께\"…농심 신라면, 무신사 오사카 팝업서 현지 소비자 만납니다",
+          "totalScore": 85
+        }
+      ],
+      "selectedTitleId": "tc-3",
+      "draftSections": [
+        {
+          "id": "sec-1",
+          "title": "왜 패션 팝업에 신라면 부스가 등장했을까요?",
+          "subtitle": "",
+          "content": "K패션을 보러 갔다가 K푸드까지 경험하는 소비 흐름을 접해보신 적 없으신가요? 농심은 2026년 10월 23일부터 11월 8일까지 17일간 일본 오사카 우메다의 복합문화공간 VS에서 열리는 무신사 오사카 팝업스토어 2026에 신라면 브랜드 부스를 마련합니다.\n\n이번 행사는 단순한 제품 전시보다 현지 소비자가 한국 문화를 한자리에서 경험하도록 설계한 점이 특징입니다. 무신사 팝업에는 패션·뷰티 브랜드 71곳이 참여하고 약 3400개 상품이 소개되며, 농심은 여기에 즉석 조리 체험을 더해 식품을 콘텐츠로 확장합니다.\n\n농심이 겨냥한 핵심 마케팅 키워드는 ‘K콘텐츠 간 교차 체험’입니다. 패션을 계기로 행사장을 찾은 방문객에게 신라면 툼바를 직접 맛보게 하면서 브랜드 인지도와 제품 경험을 동시에 높이는 방식입니다.",
+          "sourceIds": [
+            "src-live-1",
+            "src-live-2"
+          ]
+        },
+        {
+          "id": "sec-2",
+          "title": "무신사 오사카 팝업에서 신라면은 어떻게 다르게 소개되나요?",
+          "subtitle": "",
+          "content": "농심은 일반적인 진열 판매 대신 한국에서 익숙한 즉석 라면조리기를 전면에 내세웁니다. 방문객은 이른바 한강라면 방식으로 현장에서 갓 조리한 신라면 툼바를 맛볼 수 있으며, 제품의 조리법과 식사 경험까지 함께 전달받습니다.\n\n무신사는 오사카 우메다의 젊은 소비자와 외국인 관광객이 많이 찾는 상업지역에서 K패션과 K뷰티를 선보입니다. 농심은 이 유동인구와 패션 관심층을 신라면 브랜드의 새로운 접점으로 활용해 제품을 ‘먹는 상품’에서 ‘참여하는 콘텐츠’로 전환합니다.\n\n특히 신라면 툼바 시식 뒤 설문에 참여하면 신라면 로제를 받을 수 있어 단일 제품 홍보에 그치지 않고 신라면의 다양한 제품군을 함께 알리는 구조를 만듭니다.",
+          "sourceIds": [
+            "src-live-1",
+            "src-live-2"
+          ]
+        },
+        {
+          "id": "sec-3",
+          "title": "무료 시식과 증정 혜택을 놓치지 않으려면 어떻게 해야 할까요?",
+          "subtitle": "",
+          "content": "■ 농심 신라면 툼바 캠페인·제품·마케팅 핵심 내용\n농심은 VS 내 신라면 부스에서 즉석 라면조리기로 조리한 신라면 툼바를 무료로 제공합니다. 시식에 참여하려면 농심재팬 공식 인스타그램을 팔로우해야 하며, 이후 설문조사까지 완료한 방문객에게 신라면 로제를 증정합니다.\n\n■ 무신사 오사카 팝업 캠페인·제품·마케팅 핵심 내용\n무신사는 10월 23일부터 11월 8일까지 오사카 우메다 VS에서 패션·뷰티 브랜드 71곳과 약 3400개 상품을 소개합니다. 농심 신라면 부스는 이 대형 패션 팝업의 방문 동선을 활용해 K푸드 체험을 연결합니다.\n\n■ 신라면 툼바·신라면 로제 제품 연계 핵심 내용\n신라면 툼바는 현장 즉석 조리 시식 제품으로 활용되고, 신라면 로제는 시식 후 설문 참여자에게 제공되는 후속 혜택으로 구성됩니다. 방문객은 한 번의 부스 방문으로 새로운 맛의 시식과 다른 제품의 체험 기회를 함께 얻을 수 있습니다.\n\n다만 공개된 안내에는 일별 제공 수량과 개인별 증정 수량이 구체적으로 제시되지 않았습니다. 방문객은 행사 초반이나 운영 시작 시간에 맞춰 방문하고, 현장에서 당일 참여 조건과 재고를 확인하는 편이 유리합니다.",
+          "sourceIds": [
+            "src-live-1",
+            "src-live-2"
+          ]
+        }
+      ],
+      "summaryBlocks": {
+        "mkCategory": "기업뉴스",
+        "mkCategoryReason": "농심과 무신사가 일본 오사카 팝업에서 K푸드와 K패션을 결합한 공동 마케팅을 전개하는 다기업 캠페인 사례이므로 기업뉴스로 분류합니다.",
+        "byline": "기업뉴스 | 남궁선희 기자 | 입력 2026.10.26 10:00",
+        "companyTags": [
+          "신라면 오사카 팝업"
+        ],
+        "subtitle": "농심·무신사, 오사카 우메다서 K패션과 K푸드 결합\n신라면 툼바 시식부터 설문 참여 혜택까지 현지 체험 확대",
+        "aiFactSummary": [
+          "농심은 10월 23일부터 11월 8일까지 오사카 우메다 VS에서 신라면 브랜드 부스를 운영합니다.",
+          "방문객은 즉석 라면조리기로 조리한 신라면 툼바를 맛보고, 신라면 로제 증정 이벤트에도 참여할 수 있습니다.",
+          "이번 협업은 무신사의 K패션 팝업에 농심의 K푸드를 결합해 일본 현지 소비자 접점을 넓히는 체험형 마케팅입니다."
+        ],
+        "summaryTable": {
+          "title": "[요약표] 농심·무신사 오사카 팝업 라인업과 참여 방법 비교",
+          "headers": [
+            "브랜드·채널",
+            "라인업·프로그램",
+            "차별점",
+            "구매·참여 팁"
+          ],
+          "rows": [
+            [
+              "농심 신라면 부스",
+              "신라면 툼바 무료 시식",
+              "즉석 라면조리기로 현장 조리합니다.",
+              "농심재팬 공식 인스타그램을 팔로우해야 합니다."
+            ],
+            [
+              "농심 설문 이벤트",
+              "신라면 로제 증정",
+              "시식과 설문을 연계해 제품군을 함께 알립니다.",
+              "시식 후 설문조사 참여 조건을 확인해야 합니다."
+            ],
+            [
+              "무신사 오사카 팝업",
+              "패션·뷰티 71개 브랜드, 약 3400개 상품",
+              "K패션·K뷰티와 K푸드를 한 공간에서 경험합니다.",
+              "행사 기간은 10월 23일부터 11월 8일까지입니다."
+            ]
+          ]
+        },
+        "faqs": [
+          {
+            "q": "Q1. 신라면 오사카 팝업은 언제 어디에서 열리나요?",
+            "a": "농심 신라면 부스는 2026년 10월 23일부터 11월 8일까지 일본 오사카 우메다의 복합문화공간 VS에서 운영합니다. 무신사 오사카 팝업스토어 2026 안에 마련되므로 행사 기간과 장소를 함께 확인하면 됩니다."
+          },
+          {
+            "q": "Q2. 신라면 툼바를 무료로 맛보려면 어떻게 해야 하나요?",
+            "a": "농심재팬 공식 인스타그램을 팔로우한 방문객은 현장에서 즉석 조리한 신라면 툼바를 시식할 수 있습니다. 다만 일별 제공 수량과 대기 상황은 현장 운영에 따라 달라질 수 있습니다."
+          },
+          {
+            "q": "Q3. 시식하면 신라면 로제도 받을 수 있나요?",
+            "a": "신라면 툼바를 맛본 뒤 설문조사에 참여하면 신라면 로제를 증정합니다. 증정 수량과 개인별 조건은 현장 안내를 확인해야 하므로 방문 시 설문 참여 절차를 먼저 확인하는 것이 좋습니다."
+          },
+          {
+            "q": "Q4. 아이나 친구와 함께 가도 즐길 만한 행사인가요?",
+            "a": "현장에서 라면이 조리되는 과정을 보고 바로 맛볼 수 있어 가족이나 친구와 함께 체험하기 좋습니다. 패션·뷰티 브랜드 71곳과 약 3400개 상품도 함께 소개돼 동반 방문객이 각자 관심사를 즐길 수 있습니다."
+          },
+          {
+            "q": "Q5. 신라면 툼바와 신라면 로제를 현장에서 모두 구매할 수 있나요?",
+            "a": "공개된 행사 안내의 중심은 신라면 툼바 시식과 신라면 로제 증정 프로그램입니다. 상시 판매 여부와 구매 수량은 행사장 재고 및 운영 정책에 따라 달라질 수 있으므로 현장 부스에서 확인해야 합니다."
+          }
+        ],
+        "fanoutQuestions": [
+          {
+            "id": "fq-pplx-1",
+            "category": "예약·대기",
+            "q": "사전 예약 없이 오사카 무신사 팝업에 가도 신라면 툼바를 바로 맛볼 수 있나요?",
+            "a": "공개된 안내에는 신라면 부스의 별도 사전 예약 조건이 제시되지 않았으며, 농심재팬 공식 인스타그램 팔로우가 시식 참여 조건으로 안내됩니다. 주말이나 행사 초반에는 대기 인원이 몰릴 수 있으므로 운영 시작 시간에 맞춰 방문하는 편이 유리합니다."
+          },
+          {
+            "id": "fq-pplx-2",
+            "category": "가격·혜택",
+            "q": "신라면 툼바 시식과 신라면 로제 증정은 무료인가요?",
+            "a": "신라면 툼바는 현장에서 무료로 제공되는 시식 프로그램이며, 시식 후 설문조사에 참여한 방문객에게 신라면 로제를 증정합니다. 별도 결제보다는 인스타그램 팔로우와 설문 참여 조건을 충족하는 방식입니다."
+          },
+          {
+            "id": "fq-pplx-3",
+            "category": "위치·교통",
+            "q": "오사카에서 신라면 팝업 행사장을 찾으려면 어디로 가야 하나요?",
+            "a": "행사장은 오사카 우메다에 있는 복합문화공간 VS이며, 무신사 오사카 팝업스토어 2026 내부에 신라면 부스가 마련됩니다. 우메다는 젊은 소비자와 관광객이 많이 찾는 상업지역이므로 방문 전 지도 앱에서 VS의 정확한 출입구와 운영 동선을 확인하는 것이 좋습니다."
+          },
+          {
+            "id": "fq-pplx-4",
+            "category": "구매·수량제한",
+            "q": "신라면 로제 증정품은 1인당 몇 개까지 받을 수 있나요?",
+            "a": "현재 공개된 안내에는 1인당 증정 수량이 구체적으로 제시되지 않았습니다. 시식 후 설문 참여 조건과 당일 재고를 현장 스태프에게 확인해야 하며, 조기 소진에 대비해 일찍 방문하는 편이 안전합니다."
+          },
+          {
+            "id": "fq-pplx-5",
+            "category": "동반·선물팁",
+            "q": "아이와 함께 가거나 일본인 친구에게 K푸드를 소개하기에 괜찮을까요?",
+            "a": "즉석 라면조리기로 갓 조리한 신라면 툼바를 맛보는 방식이라 한국의 한강라면 문화를 소개하기 좋습니다. 시식 후에는 신라면 로제 증정 이벤트에도 참여할 수 있어 K푸드 체험과 선물 수요를 함께 고려할 수 있습니다."
+          },
+          {
+            "id": "fq-pplx-6",
+            "category": "차별점·비교",
+            "q": "일반적인 신라면 매장 행사와 비교해 이번 오사카 팝업은 무엇이 다른가요?",
+            "a": "이번 행사는 식품 매장이 아니라 패션·뷰티 브랜드 71곳이 참여하는 무신사 팝업에 신라면 체험을 결합한 점이 다릅니다. 제품을 진열하는 대신 즉석 조리 시식과 설문 이벤트를 통해 K패션 방문객을 K푸드 경험으로 연결합니다."
+          },
+          {
+            "id": "fq-pplx-7",
+            "category": "온라인·앱연동",
+            "q": "현장에 못 가도 신라면 오사카 팝업 이벤트에 온라인으로 참여할 수 있나요?",
+            "a": "공개된 행사 안내상 핵심 혜택인 신라면 툼바 시식과 신라면 로제 증정은 오사카 현장 방문 프로그램입니다. 현장 방문이 어렵다면 농심재팬 공식 인스타그램과 농심·무신사 공식 채널에서 관련 콘텐츠와 후속 일정을 확인하는 것이 좋습니다."
+          },
+          {
+            "id": "fq-pplx-8",
+            "category": "후속일정·주의사항",
+            "q": "행사가 끝난 뒤에도 신라면 툼바 관련 소식과 판매처를 확인할 수 있나요?",
+            "a": "행사는 11월 8일까지 운영되므로 이후에는 농심재팬 공식 인스타그램과 농심 공식 채널에서 후속 콘텐츠와 판매 정보를 확인하는 것이 적절합니다. 현장 증정품과 시식 혜택은 행사 기간 및 재고에 연동되므로 종료 후 동일한 조건으로 이용하기는 어렵습니다."
+          }
+        ],
+        "oneLineSummary": "농심이 무신사 오사카 팝업에 신라면 부스를 열고 즉석 조리한 신라면 툼바 시식과 신라면 로제 증정으로 K패션과 K푸드를 연결합니다.",
+        "noticeText": "본 콘텐츠는 매경비즈 디지털뉴스룸이 공식 발표 자료와 보도자료를 바탕으로 작성했습니다.",
+        "imageRecommendations": [
+          {
+            "position": "상단 대표 이미지",
+            "sourceUrl": "https://www.mk.co.kr",
+            "keywords": [
+              "신라면 오사카 팝업 공식 이미지",
+              "신라면 오사카 팝업 현장·제품 사진"
+            ],
+            "caption": "< 출처 : 각 사 제공 >"
+          }
+        ]
+      },
+      "factChecks": [
+        {
+          "id": "fc-auto-1",
+          "sentence": "농심은 2026년 10월 23일부터 11월 8일까지 17일간 일본 오사카 우메다의 복합문화공간 VS에서 열리는 무신사 오사카 팝업스토어 2026에 신라면 브랜드 부스를 마련합니다.",
+          "verdict": "수치·팩트 확인",
+          "sourceId": "src-live-1",
+          "sourceTitle": "[참고 보도 · 매일일보] 농심, 무신사와 손잡고 일본서 신라면 알린다…오사카 팝업 운영",
+          "sourceUrl": "https://news.google.com/rss/articles/CBMiZEFVX3lxTFBtM245Z2R4RFpMR2lfWjI0bHBGTXpLdkdoV19mMC1EcExBMGc3UlZBd0t4Y2tzOGpHRVZFZ014YTBIQ0JfYzZYaEdrYW0yS0xuWEhLWG5fUlZlU21KYVQ1TzBNNkY?oc=5",
+          "status": "확인함"
+        },
+        {
+          "id": "fc-auto-2",
+          "sentence": "무신사 팝업에는 패션·뷰티 브랜드 71곳이 참여하고 약 3400개 상품이 소개되며, 농심은 여기에 즉석 조리 체험을 더해 식품을 콘텐츠로 확장합니다.",
+          "verdict": "수치·팩트 확인",
+          "sourceId": "src-live-1",
+          "sourceTitle": "[참고 보도 · 매일일보] 농심, 무신사와 손잡고 일본서 신라면 알린다…오사카 팝업 운영",
+          "sourceUrl": "https://news.google.com/rss/articles/CBMiZEFVX3lxTFBtM245Z2R4RFpMR2lfWjI0bHBGTXpLdkdoV19mMC1EcExBMGc3UlZBd0t4Y2tzOGpHRVZFZ014YTBIQ0JfYzZYaEdrYW0yS0xuWEhLWG5fUlZlU21KYVQ1TzBNNkY?oc=5",
+          "status": "확인함"
+        },
+        {
+          "id": "fc-auto-3",
+          "sentence": "무신사는 10월 23일부터 11월 8일까지 오사카 우메다 VS에서 패션·뷰티 브랜드 71곳과 약 3400개 상품을 소개합니다.",
+          "verdict": "수치·팩트 확인",
+          "sourceId": "src-live-1",
+          "sourceTitle": "[참고 보도 · 매일일보] 농심, 무신사와 손잡고 일본서 신라면 알린다…오사카 팝업 운영",
+          "sourceUrl": "https://news.google.com/rss/articles/CBMiZEFVX3lxTFBtM245Z2R4RFpMR2lfWjI0bHBGTXpLdkdoV19mMC1EcExBMGc3UlZBd0t4Y2tzOGpHRVZFZ014YTBIQ0JfYzZYaEdrYW0yS0xuWEhLWG5fUlZlU21KYVQ1TzBNNkY?oc=5",
+          "status": "미처리"
+        }
+      ],
+      "liveNewsCount": 5,
+      "usedPerplexity": true
+    }
+  ],
+  "config": {
+    "perplexityApiKey": ""
+  }
+}
