@@ -1,6 +1,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const {
   CONTENT_TYPES,
   MK_PICK_CATEGORIES,
@@ -15,8 +16,10 @@ const {
 } = require('./public/mockData');
 
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = path.join(__dirname, 'data');
+const IS_SERVERLESS = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.VERCEL);
+const DATA_DIR = IS_SERVERLESS ? path.join(os.tmpdir(), 'mk-pick-data') : path.join(__dirname, 'data');
 const DB_PATH = path.join(DATA_DIR, 'db.json');
+const SEED_DB_PATH = path.join(__dirname, 'data', 'db.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 function decodeXmlEntities(str) {
@@ -730,8 +733,9 @@ function readDb() {
       // ignore
     }
   }
-  if (process.env.PERPLEXITY_API_KEY) {
-    db.config.perplexityApiKey = process.env.PERPLEXITY_API_KEY;
+  const envKey = (process.env.PERPLEXITY_API_KEY || process.env.PPLX_API_KEY || '').trim();
+  if (envKey && !db.config.perplexityApiKey) {
+    db.config.perplexityApiKey = envKey;
   }
   return db;
 }
@@ -787,9 +791,9 @@ const MIME_TYPES = {
   '.pdf': 'application/pdf'
 };
 
-const server = http.createServer(async (req, res) => {
-  const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
-  const pathname = parsedUrl.pathname;
+const requestHandler = async (req, res) => {
+  const parsedUrl = new URL(req.url, `http://${req.headers?.host || 'localhost'}`);
+  const pathname = parsedUrl.pathname.replace(/^\/\.netlify\/functions\/api/, '/api');
 
   try {
     // 0. Perplexity API 키 설정 및 실시간 API 버닝(사용량·과금) 상태 조회 (/api/config)
@@ -1100,9 +1104,15 @@ const server = http.createServer(async (req, res) => {
     console.error(err);
     sendJson(res, 500, { error: err.message || '서버 오류가 발생했습니다.' });
   }
-});
+};
 
-ensureDb();
-server.listen(PORT, () => {
-  console.log(`MK Pick 콘텐츠 스튜디오 서버가 실행 중입니다: http://localhost:${PORT}`);
-});
+const server = http.createServer(requestHandler);
+
+if (require.main === module) {
+  ensureDb();
+  server.listen(PORT, () => {
+    console.log(`MK Pick 콘텐츠 스튜디오 서버가 실행 중입니다: http://localhost:${PORT}`);
+  });
+}
+
+module.exports = { requestHandler, ensureDb };

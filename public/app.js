@@ -94,6 +94,308 @@
     return data;
   }
 
+  // ==========================================================================
+  // GitHub Pages 등 정적 배포 환경을 위한 브라우저 직접 Perplexity API 연동 & 30분 스마트 캐시 엔진
+  // ==========================================================================
+  const CLIENT_STORAGE_KEY = 'mk_pplx_api_key_v1';
+  const CLIENT_DISCONNECTED_FLAG = 'mk_pplx_disconnected_v1';
+  const CLIENT_USAGE_KEY = 'mk_pplx_usage_stats_v1';
+  const CLIENT_TREND_CACHE_KEY = 'mk_pplx_trend_cache_v1';
+  const CLIENT_WORKS_STORAGE_KEY = 'mk_pplx_saved_works_v1';
+  const CLIENT_TREND_TTL_MS = 30 * 60 * 1000; // 30분 캐시
+
+  // 정적 호스팅 폴백용 기본값 (Netlify에서는 서버리스 환경 변수 PERPLEXITY_API_KEY가 /api/* 를 통해 자동 연동됨)
+  function getDefaultTeamKey() {
+    return '';
+  }
+
+  function getClientPerplexityKey() {
+    try {
+      // URL 해시(#pplx=...)로 전달된 공유 키가 있으면 즉시 저장 후 주소창 정리
+      if (window.location.hash && window.location.hash.includes('pplx=')) {
+        const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+        const sharedKey = (params.get('pplx') || '').trim();
+        if (sharedKey.startsWith('pplx-')) {
+          localStorage.setItem(CLIENT_STORAGE_KEY, sharedKey);
+          localStorage.removeItem(CLIENT_DISCONNECTED_FLAG);
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+      }
+      if (localStorage.getItem(CLIENT_DISCONNECTED_FLAG) === '1') {
+        return '';
+      }
+      const saved = (localStorage.getItem(CLIENT_STORAGE_KEY) || '').trim();
+      if (saved) return saved;
+      return getDefaultTeamKey();
+    } catch (e) {
+      return getDefaultTeamKey();
+    }
+  }
+
+  function maskApiKey(k) {
+    if (!k || k.length < 9) return '';
+    return k.slice(0, 5) + '••••' + k.slice(-4);
+  }
+
+  function getClientUsageStats() {
+    const defaultStats = {
+      model: 'sonar',
+      totalCalls: 0,
+      trendCalls: 0,
+      draftCalls: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      estimatedCostUsd: 0,
+      estimatedCostKrw: 0,
+      lastCalledAt: null,
+      cacheHitsOnRefresh: 0
+    };
+    try {
+      const raw = localStorage.getItem(CLIENT_USAGE_KEY);
+      if (!raw) return defaultStats;
+      return { ...defaultStats, ...JSON.parse(raw) };
+    } catch (e) {
+      return defaultStats;
+    }
+  }
+
+  function saveClientUsageStats(stats) {
+    try {
+      localStorage.setItem(CLIENT_USAGE_KEY, JSON.stringify(stats));
+    } catch (e) {
+      // ignore storage quota errors
+    }
+    state.apiUsageStats = stats;
+  }
+
+  function recordClientPerplexityUsage(usage = {}, callType = 'draft') {
+    const stats = getClientUsageStats();
+    const pTokens = Number(usage.prompt_tokens) || 950;
+    const cTokens = Number(usage.completion_tokens) || 1450;
+    stats.totalCalls += 1;
+    if (callType === 'trend') stats.trendCalls += 1;
+    else stats.draftCalls += 1;
+    stats.promptTokens += pTokens;
+    stats.completionTokens += cTokens;
+    stats.totalTokens += pTokens + cTokens;
+    const callCostUsd = 0.005 + (pTokens / 1_000_000) * 1.0 + (cTokens / 1_000_000) * 1.0;
+    stats.estimatedCostUsd = Number((stats.estimatedCostUsd + callCostUsd).toFixed(5));
+    stats.estimatedCostKrw = Math.round(stats.estimatedCostUsd * 1380);
+    stats.lastCalledAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    saveClientUsageStats(stats);
+  }
+
+  function stripCitationBracketsClient(val) {
+    if (typeof val === 'string') {
+      return val.replace(/\s*\[\d+\]/g, '').trim();
+    }
+    if (Array.isArray(val)) {
+      return val.map(stripCitationBracketsClient);
+    }
+    if (val && typeof val === 'object') {
+      const out = {};
+      for (const k of Object.keys(val)) {
+        out[k] = stripCitationBracketsClient(val[k]);
+      }
+      return out;
+    }
+    return val;
+  }
+
+  async function callPerplexityDirectFromBrowser(apiKey, systemPrompt, userPrompt, recencyFilter = 'month', callType = 'draft') {
+    const res = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey.trim()}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        temperature: 0.2,
+        search_recency_filter: recencyFilter,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ]
+      })
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`Perplexity API 호출 실패 (${res.status}): ${errText.slice(0, 100)}`);
+    }
+
+    const data = await res.json();
+    recordClientPerplexityUsage(data?.usage, callType);
+    const content = data?.choices?.[0]?.message?.content || '';
+    const citations = Array.isArray(data?.citations) ? data.citations : [];
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('Perplexity 응답에서 JSON을 추출하지 못했습니다.');
+    }
+    const parsed = stripCitationBracketsClient(JSON.parse(jsonMatch[0]));
+    return { parsed, citations };
+  }
+
+  async function fetchClientPerplexityTrends(apiKey) {
+    const sys = `당신은 매일경제 디지털뉴스룸(MK Pick) 실시간 트렌드 데스크입니다.
+철칙:
+1. '두바이 초콜릿/쿠키', '버터떡', '우베', '탕후루', '요아정'처럼 이미 유행이 지났거나 과거 결산 기사에 나오는 유행어를 절대 포함하지 마세요.
+2. 최근 7일 이내 한국에서 실제 화제가 된 신상품, 품절템, 팝업스토어, MZ 소비 현상만 선별하세요.
+3. 4개 탭(shortFormTrends, newsletterTrends, portalRetailTrends, googleTrends) 각각 정확히 10개씩 작성하되, 중복 없이 순수 JSON 객체만 출력하세요.`;
+
+    const usr = `이번 주 대한민국에서 가장 화제가 되고 있는 실시간 유통·팝업·패션·라이프스타일·IT 트렌드 키워드를 탭별로 서로 겹치지 않게 정확히 10개씩 JSON으로 작성하세요.
+- keyword는 2~4어절의 직관적인 최신 트렌드 키워드로 작성하세요.
+- desc는 구체적인 브랜드명·가격·수치·일정을 담아 "~합니다" 체 1문장으로 작성하세요.
+
+{
+  "shortFormTrends": [{"keyword": "숏폼·바이럴·오픈런 키워드 (10개)", "badge": "🎬 쇼츠·릴스 화제", "desc": "이번 주 화제 이유와 수치 1문장"}],
+  "newsletterTrends": [{"keyword": "MZ 소비문화·패션·신조어 키워드 (10개)", "category": "MZ·소비 이슈", "desc": "이번 주 화제 이유와 수치 1문장"}],
+  "portalRetailTrends": [{"keyword": "편의점·다이소·백화점 신상 키워드 (10개)", "badge": "포털·유통 신상", "desc": "이번 주 출시·품절·프로모션 팩트 1문장"}],
+  "googleTrends": [{"keyword": "오늘·이번주 급상승 키워드 (10개)", "badge": "실시간 급상승", "desc": "급상승 배경 1문장"}]
+}`;
+    const { parsed } = await callPerplexityDirectFromBrowser(apiKey, sys, usr, 'week', 'trend');
+    return parsed;
+  }
+
+  async function buildClientPerplexityEnhancedScenario({ apiKey, keyword, company, url, rawText, typeId, baseScenario }) {
+    const tInfo = CONTENT_TYPES[typeId] || CONTENT_TYPES[4];
+    const typeInstructions = {
+      1: '유형 1(유료 업체 타겟팅 기획 콘텐츠): 1단락은 과거 일괄 방식 vs 현재 맞춤형 시대별 변화 비교, 2단락은 타깃 파트너사 및 주요 기업 4곳의 핵심 서비스·혜택 집중 소개, 3단락은 실패 없는 업체 선택 기준. 요약표는 업체별 서비스·혜택·추천대상 비교표, FAQ는 7문항.',
+      2: '유형 2(특정 기념일 관련 콘텐츠): 1단락은 기념일 유래·법적 지정 배경, 2단락은 정부·지자체 공식 지원 제도 및 바우처, 3단락은 이 기념일을 맞아 참여하는 주요 브랜드 3~5곳을 선정해 반드시 본문 안에 "■ [브랜드명] 캠페인·제품·마케팅명" 형태의 소항목으로 나누어 각 브랜드별 프로모션·제품·ESG 활동을 구체적으로 각각 소개할 것. 요약표는 브랜드별 캠페인/제품·혜택·참여조건·기간 비교표, FAQ는 5문항.',
+      3: '유형 3(최신 트렌드 반영 콘텐츠 1 - SNS·숏폼 바이럴 확장): 1단락은 과거 원조 유행부터 현재까지 연대별 계보, 2단락은 MZ세대가 열광하는 소비 심리 4가지 분석, 3단락은 목적형 소비 진화와 문화·유통 시사점. 요약표는 세대·시기별 유행 아이템 비교표, FAQ는 5문항.',
+      4: '유형 4(최신 트렌드 반영 콘텐츠 2 - 신제품 출시를 거시적 마케팅 키워드로 재정의): 1단락은 개별 신제품들을 관통하는 거시적 마케팅 콘셉트 도출, 2단락은 브랜드·유통 채널별 전용 라인업 및 사례 비교, 3단락은 품절 대란 속 입고 시간·구매 팁과 시사점. 요약표는 브랜드·채널별 라인업·차별점·구매팁 비교표, FAQ는 5문항.',
+      5: '유형 5(영업 기업 맞춤 기획 콘텐츠): 1단락은 독자 질문 도입 1문단 뒤 Q1~Q4 시장 메가 트렌드·소비자 페인포인트 문답, 2단락은 Q5~Q6 선택 기준 문답 후 마지막 Q7에서 영업 타깃 기업의 핵심 솔루션·경쟁력을 집중 소개. 요약표는 대상 기업 핵심 기능·기대효과 요약표, FAQ는 7문항.'
+    };
+    const faqCount = (typeId === 1 || typeId === 5) ? 7 : 5;
+    const fallbackCat = recommendMkPickCategory(keyword, typeId, company);
+
+    const sys = `당신은 매일경제 MK Pick(GEO·AEO 최적화 기사) 전문 기자입니다.
+타 언론사 기사의 문장을 절대 그대로 베끼지 말고, 수치·브랜드명·날짜 등 핵심 팩트만 추출하여 모든 본문과 답변을 매일경제 고유의 정중하고 분석적인 "~합니다/습니다" 체로 작성하세요.
+1) "산업 Q&A", 2) "제품·기술", 3) "성공사례", 4) "기업뉴스", 5) "브랜드스토리(기업관)" 중 가장 적합한 1개를 "mkCategory"로 추천하세요.
+- 본문 각 단락의 소제목(draftSections[].title)은 번호 없이 독자의 호기심을 자극하는 한 줄 질문형 소제목(~할까요? / ~인가요?)으로 작성하세요.
+- FAQ 질문(faqs[].q)은 실제 독자가 검색창에 물어볼 법한 구어체 자연어 질문으로 총 ${faqCount}문항을 작성하고, 답변(faqs[].a)은 구체적인 수치·장소·조건을 포함한 2문장("~합니다/습니다" 체)으로 작성하세요.
+반드시 순수 JSON 객체만 출력하세요.`;
+
+    const usr = `[작성 요청 정보]
+- 키워드/주제: ${keyword}
+- 타깃 기업/브랜드(선택): ${company || '관련 주요 기업·브랜드'}
+- 참고 URL: ${url || '없음'}
+- 추가 보도자료/메모: ${rawText || '없음'}
+- 선택된 콘텐츠 유형: ${tInfo.shortName} (${tInfo.desc})
+- 유형별 필수 구성 지침: ${typeInstructions[typeId] || typeInstructions[4]}
+
+아래 JSON 스키마에 맞춰 한국어로 작성하세요:
+{
+  "mkCategory": "산업 Q&A | 제품·기술 | 성공사례 | 기업뉴스 | 브랜드스토리(기업관) 중 택 1",
+  "mkCategoryReason": "이 기사에 해당 MK Pick 카테고리를 추천한 이유 1문장 (~합니다 체)",
+  "titleCandidates": [
+    {"id": "tc-1", "title": "\\"큰따옴표 인용구\\"…핵심 키워드 포함 설명형 제목", "totalScore": 96},
+    {"id": "tc-2", "title": "\\"큰따옴표 인용구\\"…설명형 제목 2", "totalScore": 93},
+    {"id": "tc-3", "title": "\\"큰따옴표 인용구\\"…설명형 제목 3", "totalScore": 90},
+    {"id": "tc-4", "title": "\\"큰따옴표 인용구\\"…설명형 제목 4", "totalScore": 88},
+    {"id": "tc-5", "title": "\\"큰따옴표 인용구\\"…설명형 제목 5", "totalScore": 85}
+  ],
+  "researchFacts": [
+    {"category": "핵심 팩트 분류", "fact": "수치·브랜드명이 포함된 ~합니다 체 팩트 문장 1"},
+    {"category": "핵심 팩트 분류", "fact": "수치·브랜드명이 포함된 ~합니다 체 팩트 문장 2"},
+    {"category": "핵심 팩트 분류", "fact": "수치·브랜드명이 포함된 ~합니다 체 팩트 문장 3"},
+    {"category": "핵심 팩트 분류", "fact": "수치·브랜드명이 포함된 ~합니다 체 팩트 문장 4"}
+  ],
+  "subtitle": "기사 부제 2줄 (줄바꿈 \\n 사용)",
+  "aiFactSummary": [
+    "1. 핵심 팩트 요약 첫 번째 문장 (~합니다 체)",
+    "2. 핵심 팩트 요약 두 번째 문장 (~합니다 체)",
+    "3. 핵심 팩트 요약 세 번째 문장 (~합니다 체)"
+  ],
+  "draftSections": [
+    {"id": "sec-1", "title": "독자 호기심을 자극하는 첫 번째 질문형 소제목 (~할까요?)", "content": "첫 문장은 독자에게 말을 거는 질문형으로 시작하고 구체적인 수치·브랜드 팩트를 담아 2~3문단(~합니다 체)으로 작성"},
+    {"id": "sec-2", "title": "독자 호기심을 자극하는 두 번째 질문형 소제목 (~인가요?)", "content": "구체적 기업·브랜드 사례, 수치, 비교 내용을 2~3문단(~합니다 체)으로 상세히 작성"},
+    {"id": "sec-3", "title": "독자 호기심을 자극하는 세 번째 질문형 소제목 (~무엇인가요?)", "content": "유형 지침에 맞춘 세 번째 단락 내용 (~합니다 체)"}
+  ],
+  "summaryTable": {
+    "title": "[요약표] 유형에 맞는 비교표 제목",
+    "headers": ["구분1", "구분2", "구분3", "구분4"],
+    "rows": [
+      ["행1-1", "행1-2", "행1-3", "행1-4"],
+      ["행2-1", "행2-2", "행2-3", "행2-4"],
+      ["행3-1", "행3-2", "행3-3", "행3-4"]
+    ]
+  },
+  "faqs": [
+    {"q": "Q1. 실제 독자가 검색창에 물어볼 법한 구어체 자연어 질문", "a": "구체적인 수치·장소·조건이 담긴 2문장 완결형 답변 (~합니다 체)"}
+  ],
+  "oneLineSummary": "한 줄 요약! 전체 핵심 요약 1~2문장 (~합니다 체)"
+}`;
+
+    const { parsed, citations } = await callPerplexityDirectFromBrowser(apiKey, sys, usr, 'month', 'draft');
+    const mergedSources = [...(baseScenario.sources || [])];
+    citations.slice(0, 5).forEach((citUrl, i) => {
+      if (typeof citUrl === 'string' && !mergedSources.some(s => s.url === citUrl)) {
+        mergedSources.push({
+          id: `src-pplx-${i + 1}`,
+          url: citUrl,
+          title: `[Perplexity 실시간 검증 출처 #${i + 1}] ${citUrl}`,
+          method: 'Perplexity 실시간 검색',
+          reliability: '높음',
+          excluded: false
+        });
+      }
+    });
+
+    const researchItems = Array.isArray(parsed.researchFacts) && parsed.researchFacts.length > 0
+      ? parsed.researchFacts.map((rf, i) => ({
+          id: `ri-pplx-${i + 1}`,
+          category: rf.category || `Perplexity 추출 팩트 #${i + 1}`,
+          fact: rf.fact,
+          rawReference: 'Perplexity 실시간 웹 검색 및 매경 문체 재가공',
+          sourceIds: [mergedSources[i % Math.max(1, mergedSources.length)]?.id].filter(Boolean)
+        }))
+      : baseScenario.researchItems;
+
+    const draftSections = Array.isArray(parsed.draftSections) && parsed.draftSections.length > 0
+      ? parsed.draftSections.map((sec, i) => ({
+          id: `sec-${i + 1}`,
+          title: String(sec.title || `핵심 질문 ${i + 1}`).replace(/^\d+[\.\)]\s*/, ''),
+          content: sec.content || '',
+          sourceIds: [mergedSources[0]?.id, mergedSources[1]?.id].filter(Boolean)
+        }))
+      : baseScenario.draftSections;
+
+    const validCategories = MK_PICK_CATEGORIES.map(c => c.id);
+    const chosenCat = validCategories.includes(parsed.mkCategory) ? parsed.mkCategory : fallbackCat;
+    const summaryBlocks = {
+      ...baseScenario.summaryBlocks,
+      mkCategory: chosenCat,
+      mkCategoryReason: parsed.mkCategoryReason || baseScenario.summaryBlocks.mkCategoryReason,
+      byline: `${chosenCat} | 남궁선희 기자 | 입력 ${new Date().toISOString().slice(0, 10).replace(/-/g, '.')} 10:00`,
+      subtitle: parsed.subtitle || baseScenario.summaryBlocks.subtitle,
+      aiFactSummary: Array.isArray(parsed.aiFactSummary) && parsed.aiFactSummary.length > 0
+        ? parsed.aiFactSummary
+        : baseScenario.summaryBlocks.aiFactSummary,
+      summaryTable: parsed.summaryTable && Array.isArray(parsed.summaryTable.rows)
+        ? parsed.summaryTable
+        : baseScenario.summaryBlocks.summaryTable,
+      faqs: Array.isArray(parsed.faqs) && parsed.faqs.length > 0
+        ? parsed.faqs
+        : baseScenario.summaryBlocks.faqs,
+      oneLineSummary: parsed.oneLineSummary || baseScenario.summaryBlocks.oneLineSummary
+    };
+
+    return {
+      ...baseScenario,
+      titleCandidates: Array.isArray(parsed.titleCandidates) && parsed.titleCandidates.length > 0
+        ? parsed.titleCandidates
+        : baseScenario.titleCandidates,
+      sources: mergedSources,
+      researchItems,
+      draftSections,
+      summaryBlocks,
+      factChecks: extractFactSentencesFromSections(draftSections, mergedSources)
+    };
+  }
+
   // 기사 본문 전체의 GEO 최적화 달성 여부를 실시간 자동 진단하는 함수
   function evaluateGeoChecklist(w) {
     if (!w) return { passedCount: 0, total: GEO_CHECKLIST_ITEMS.length, details: [] };
@@ -203,8 +505,13 @@
   async function saveCurrentWork(silent = true) {
     if (!state.currentWork) return;
     updateLiveStatsAndGeoUI();
+    const targetWork = state.currentWork;
+    const idx = state.works.findIndex(w => w.id === targetWork.id);
+    if (idx !== -1) state.works[idx] = targetWork;
     try {
-      const targetWork = state.currentWork;
+      localStorage.setItem(CLIENT_WORKS_STORAGE_KEY, JSON.stringify(state.works.slice(0, 30)));
+    } catch (e) {}
+    try {
       const res = await apiFetch(`/api/works/${targetWork.id}`, {
         method: 'PUT',
         body: JSON.stringify(targetWork)
@@ -213,12 +520,10 @@
       if (res.work && targetWork === state.currentWork) {
         targetWork.updatedAt = res.work.updatedAt || targetWork.updatedAt;
       }
-      const idx = state.works.findIndex(w => w.id === targetWork.id);
-      if (idx !== -1) state.works[idx] = targetWork;
       if (!silent) showToast('변경사항이 저장되었습니다.');
     } catch (err) {
-      // 서버 일시 중단 시에도 화면 편집은 그대로 유지
-      console.warn('Auto-save warning:', err.message);
+      // 정적 배포(GitHub Pages) 또는 서버 일시 중단 시에도 브라우저 로컬 저장소에 안전하게 보관
+      if (!silent) showToast('변경사항이 브라우저에 저장되었습니다.');
     }
   }
 
@@ -362,13 +667,51 @@
         newsletterTrends: radar.newsletterTrends || CURATED_TREND_TOPICS.newsletter || []
       };
     } catch (e) {
-      // 정적 배포(GitHub Pages 등) 환경 폴백
-      state.trendRadar = {
-        googleTrends: CURATED_TREND_TOPICS.google || [],
-        portalRetailTrends: CURATED_TREND_TOPICS.portalRetail || [],
-        shortFormTrends: CURATED_TREND_TOPICS.shortForm || [],
-        newsletterTrends: CURATED_TREND_TOPICS.newsletter || []
-      };
+      // 정적 배포(GitHub Pages 등) 환경: 브라우저에서 Perplexity API 직접 호출 (30분 스마트 캐시 적용)
+      const clientKey = getClientPerplexityKey();
+      let loadedFromClientPplx = false;
+      if (clientKey) {
+        try {
+          if (!forceRefresh) {
+            const cachedRaw = localStorage.getItem(CLIENT_TREND_CACHE_KEY);
+            if (cachedRaw) {
+              const cachedObj = JSON.parse(cachedRaw);
+              if (cachedObj && cachedObj.timestamp && (Date.now() - cachedObj.timestamp < CLIENT_TREND_TTL_MS)) {
+                const stats = getClientUsageStats();
+                stats.cacheHitsOnRefresh = (stats.cacheHitsOnRefresh || 0) + 1;
+                saveClientUsageStats(stats);
+                state.trendRadar = cachedObj.data;
+                loadedFromClientPplx = true;
+              }
+            }
+          }
+          if (!loadedFromClientPplx) {
+            const pplxTrends = await fetchClientPerplexityTrends(clientKey);
+            const mergedRadar = {
+              googleTrends: (pplxTrends.googleTrends || []).slice(0, 10).length > 0 ? pplxTrends.googleTrends.slice(0, 10) : (CURATED_TREND_TOPICS.google || []),
+              portalRetailTrends: (pplxTrends.portalRetailTrends || []).slice(0, 10).length > 0 ? pplxTrends.portalRetailTrends.slice(0, 10) : (CURATED_TREND_TOPICS.portalRetail || []),
+              shortFormTrends: (pplxTrends.shortFormTrends || []).slice(0, 10).length > 0 ? pplxTrends.shortFormTrends.slice(0, 10) : (CURATED_TREND_TOPICS.shortForm || []),
+              newsletterTrends: (pplxTrends.newsletterTrends || []).slice(0, 10).length > 0 ? pplxTrends.newsletterTrends.slice(0, 10) : (CURATED_TREND_TOPICS.newsletter || [])
+            };
+            state.trendRadar = mergedRadar;
+            localStorage.setItem(CLIENT_TREND_CACHE_KEY, JSON.stringify({
+              timestamp: Date.now(),
+              data: mergedRadar
+            }));
+            loadedFromClientPplx = true;
+          }
+        } catch (clientErr) {
+          console.warn('Client Perplexity trend fallback:', clientErr.message);
+        }
+      }
+      if (!loadedFromClientPplx) {
+        state.trendRadar = {
+          googleTrends: CURATED_TREND_TOPICS.google || [],
+          portalRetailTrends: CURATED_TREND_TOPICS.portalRetail || [],
+          shortFormTrends: CURATED_TREND_TOPICS.shortForm || [],
+          newsletterTrends: CURATED_TREND_TOPICS.newsletter || []
+        };
+      }
     }
     state.isLoadingTrends = false;
   }
@@ -376,13 +719,19 @@
   async function loadConfig() {
     try {
       const cfg = await apiFetch('/api/config');
+      state.isStaticHosting = false;
       state.hasPerplexityKey = Boolean(cfg.hasPerplexityKey);
       state.maskedKey = cfg.maskedKey || '';
       if (cfg.apiUsageStats) {
         state.apiUsageStats = cfg.apiUsageStats;
       }
     } catch (e) {
-      state.hasPerplexityKey = false;
+      // GitHub Pages 등 정적 호스팅 환경: 클라이언트 기본 팀 키 또는 브라우저 저장 키 자동 활성화
+      state.isStaticHosting = true;
+      const clientKey = getClientPerplexityKey();
+      state.hasPerplexityKey = Boolean(clientKey);
+      state.maskedKey = maskApiKey(clientKey);
+      state.apiUsageStats = getClientUsageStats();
     }
   }
 
@@ -390,7 +739,13 @@
     try {
       await loadConfig();
       const [worksRes] = await Promise.all([
-        apiFetch('/api/works').catch(() => ({ works: getInitialWorks ? getInitialWorks() : [] })),
+        apiFetch('/api/works').catch(() => {
+          try {
+            const savedWorks = localStorage.getItem(CLIENT_WORKS_STORAGE_KEY);
+            if (savedWorks) return { works: JSON.parse(savedWorks) };
+          } catch (e) {}
+          return { works: getInitialWorks ? getInitialWorks() : [] };
+        }),
         loadTrends()
       ]);
       state.works = worksRes.works || [];
@@ -414,10 +769,11 @@
       estimatedCostKrw: 0,
       cacheHitsOnRefresh: 0
     };
+    const shareUrl = 'https://moneymoeungu.github.io/mk-pick-content-studio/';
 
     modalRoot.innerHTML = `
       <div style="position: fixed; inset: 0; background: rgba(17, 24, 39, 0.45); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 20px;">
-        <div class="card" style="width: 100%; max-width: 520px; margin-bottom: 0; padding: 24px 28px;">
+        <div class="card" style="width: 100%; max-width: 540px; margin-bottom: 0; padding: 24px 28px;">
           <div class="flex-between mb-8">
             <h3 style="font-size: 17px; font-weight: 800;">Perplexity API 설정 · 실시간 과금(버닝) 모니터</h3>
             <button type="button" class="text-action" id="closeApiModalBtn" style="font-size: 16px;">✕</button>
@@ -452,14 +808,17 @@
           </div>
 
           ${state.hasPerplexityKey ? `
-            <div style="font-size: 12.5px; color: var(--status-green); background: var(--status-green-bg); padding: 8px 12px; border-radius: var(--radius-general); margin-bottom: 12px; font-weight: 700;">
-              ✓ 현재 연결된 키: ${escapeHtml(state.maskedKey)}
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--status-green); background: var(--status-green-bg); padding: 9px 12px; border-radius: var(--radius-general); margin-bottom: 12px; font-weight: 700;">
+              <span>✓ 현재 연결된 키: ${escapeHtml(state.maskedKey)} (팀 공유 배포 링크에서도 즉시 자동 연결됨)</span>
+              <button type="button" class="btn btn-sm" id="copyTeamShareUrlBtn" style="padding: 4px 9px; font-size: 11.5px; background: var(--white); color: var(--status-green); border-color: #8FD4B2; white-space: nowrap;">
+                🔗 팀 공유 링크 복사
+              </button>
             </div>
           ` : ''}
 
           <div class="mb-12">
             <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
-              Perplexity API Key 입력
+              다른 Perplexity API Key로 변경 (선택)
             </label>
             <input type="password" class="input" id="pplxApiKeyInput" placeholder="pplx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off" />
           </div>
@@ -484,11 +843,24 @@
     document.getElementById('closeApiModalBtn')?.addEventListener('click', closeModal);
     document.getElementById('cancelApiModalBtn')?.addEventListener('click', closeModal);
 
+    document.getElementById('copyTeamShareUrlBtn')?.addEventListener('click', async () => {
+      const customSaved = (localStorage.getItem(CLIENT_STORAGE_KEY) || '').trim();
+      const targetUrl = customSaved ? `${shareUrl}#pplx=${encodeURIComponent(customSaved)}` : shareUrl;
+      await navigator.clipboard.writeText(targetUrl);
+      showToast('✓ Perplexity API가 자동 연결되는 팀 공유 링크가 복사되었습니다!');
+    });
+
     document.getElementById('removeApiKeyBtn')?.addEventListener('click', async () => {
-      await apiFetch('/api/config', {
-        method: 'POST',
-        body: JSON.stringify({ perplexityApiKey: '' })
-      });
+      try {
+        localStorage.removeItem(CLIENT_STORAGE_KEY);
+        localStorage.setItem(CLIENT_DISCONNECTED_FLAG, '1');
+      } catch (e) {}
+      try {
+        await apiFetch('/api/config', {
+          method: 'POST',
+          body: JSON.stringify({ perplexityApiKey: '' })
+        });
+      } catch (e) {}
       await loadConfig();
       closeModal();
       showToast('Perplexity API 키 연결이 해제되었습니다.');
@@ -507,15 +879,24 @@
         saveBtn.textContent = '연결 및 트렌드 수집 중...';
       }
       try {
-        await apiFetch('/api/config', {
-          method: 'POST',
-          body: JSON.stringify({ perplexityApiKey: keyVal })
-        });
+        try {
+          localStorage.setItem(CLIENT_STORAGE_KEY, keyVal);
+          localStorage.removeItem(CLIENT_DISCONNECTED_FLAG);
+          localStorage.removeItem(CLIENT_TREND_CACHE_KEY);
+        } catch (e) {}
+        try {
+          await apiFetch('/api/config', {
+            method: 'POST',
+            body: JSON.stringify({ perplexityApiKey: keyVal })
+          });
+        } catch (e) {
+          // 정적 호스팅(GitHub Pages)에서는 브라우저 저장소로 즉시 동작
+        }
         await loadConfig();
         closeModal();
         showToast('✓ Perplexity API가 연결되었습니다! 실시간 최신 트렌드 키워드를 불러옵니다...');
         render(true);
-        await loadTrends();
+        await loadTrends(true);
         showToast('✓ Perplexity 실시간 최신 트렌드 키워드가 반영되었습니다!');
         render(true);
       } catch (err) {
@@ -622,15 +1003,31 @@
       showToast(`✓ [${finalTypeName} · ${finalCat}] '${keyword}' 맞춤 초안이 완성되었습니다!`);
       render(false);
     } catch (err) {
-      // GitHub Pages 등 정적 호스팅 환경에서는 클라이언트 엔진으로 즉시 생성
-      state.isSearchingNews = false;
-      const fallbackScenario = (buildDynamicScenario || buildPresetScenario)({
+      // GitHub Pages 등 정적 호스팅 환경: 브라우저에서 Perplexity API를 직접 호출해 실시간 초안 생성
+      let fallbackScenario = (buildDynamicScenario || buildPresetScenario)({
         keyword,
         company,
         url: state.homeInput.url || '',
         rawText: state.homeInput.rawText || '',
         selectedType: matchedType
       });
+      const clientKey = getClientPerplexityKey();
+      if (clientKey) {
+        try {
+          fallbackScenario = await buildClientPerplexityEnhancedScenario({
+            apiKey: clientKey,
+            keyword,
+            company,
+            url: state.homeInput.url || '',
+            rawText: state.homeInput.rawText || '',
+            typeId: matchedType,
+            baseScenario: fallbackScenario
+          });
+        } catch (pplxErr) {
+          console.warn('Client Perplexity draft fallback:', pplxErr.message);
+        }
+      }
+      state.isSearchingNews = false;
       const fallbackWork = createWorkObject
         ? createWorkObject({
             typeId: matchedType,
@@ -656,8 +1053,12 @@
           };
       state.currentWork = fallbackWork;
       state.works.unshift(fallbackWork);
+      try {
+        localStorage.setItem(CLIENT_WORKS_STORAGE_KEY, JSON.stringify(state.works.slice(0, 30)));
+      } catch (e) {}
       state.screen = 'editor';
-      showToast(`✓ [${tName}] '${keyword}' 맞춤 초안이 완성되었습니다!`);
+      const finalCat = fallbackWork.summaryBlocks?.mkCategory || '산업 Q&A';
+      showToast(`✓ [${tName} · ${finalCat}] '${keyword}' 맞춤 초안이 완성되었습니다!`);
       render(false);
     }
   }
@@ -2013,6 +2414,49 @@
         );
         render(true);
       } catch (err) {
+        // GitHub Pages 정적 배포 환경: 브라우저에서 Perplexity API 직접 호출로 팩트/기사 갱신
+        const clientKey = getClientPerplexityKey();
+        if (clientKey) {
+          try {
+            let baseScen = (buildDynamicScenario || buildPresetScenario)({
+              keyword: kw,
+              company: comp,
+              url: w.inputUrl || '',
+              rawText: w.inputRawText || '',
+              selectedType: w.typeId
+            });
+            const enhanced = await buildClientPerplexityEnhancedScenario({
+              apiKey: clientKey,
+              keyword: kw,
+              company: comp,
+              url: w.inputUrl || '',
+              rawText: w.inputRawText || '',
+              typeId: w.typeId,
+              baseScenario: baseScen
+            });
+            w.keyword = kw;
+            w.inputCompany = comp;
+            w.sources = enhanced.sources;
+            w.researchItems = enhanced.researchItems;
+            if (rebuildDraft) {
+              w.titleCandidates = enhanced.titleCandidates;
+              w.title = enhanced.titleCandidates?.[0]?.title || w.title;
+              w.draftSections = enhanced.draftSections;
+              w.summaryBlocks = enhanced.summaryBlocks;
+              w.factChecks = enhanced.factChecks;
+            }
+            saveCurrentWork(true);
+            showToast(
+              rebuildDraft
+                ? `✓ Perplexity 실시간 검색으로 '${kw}' 기사 전체를 새로 작성했습니다!`
+                : `✓ Perplexity 실시간 검색으로 '${kw}' 최신 팩트를 취재 메모장에 추가했습니다!`
+            );
+            render(true);
+            return;
+          } catch (pplxErr) {
+            console.warn('Client refresh fallback:', pplxErr.message);
+          }
+        }
         showToast(err.message);
       }
     }
