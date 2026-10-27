@@ -1725,37 +1725,57 @@
 
             <div style="padding: 18px 20px;">
               ${state.leftPanelTab === 'memo' ? `
-                <!-- [탭 1: 취재·메모] 키워드 재검색 + 매경 문체 메모장 -->
+                <!-- [탭 1: 취재·메모] 다른 키워드로 기사 바꾸기 + 매경 문체 메모장 -->
                 <div style="margin-bottom: 16px; padding-bottom: 14px; border-bottom: var(--border-thin);">
                   <div class="flex-between mb-6">
-                    <strong style="font-size: 13px; font-weight: 800;">🔍 취재 키워드 · 뉴스 팩트 수집</strong>
+                    <strong style="font-size: 13px; font-weight: 800;">🔄 다른 키워드로 기사 새로 쓰기</strong>
                     <span class="text-muted">실시간 검색 연동</span>
                   </div>
+
+                  <!-- 지저분한 해시태그 줄글 대신 깔끔한 1줄 인기 키워드 선택 드롭다운 -->
+                  <div class="mb-8">
+                    <select class="select" id="leftQuickTrendSelect" style="width: 100%; padding: 7px 10px; font-size: 12.5px; font-weight: 700; background-color: var(--mk-orange-light); border-color: var(--mk-orange-border); color: var(--text-primary); cursor: pointer;">
+                      <option value="">🔥 실시간 인기 키워드에서 바로 골라 바꾸기 (${quickTrendTags.length}선) ▼</option>
+                      ${quickTrendTags.map(tag => {
+                        const autoT = detectBestContentType(tag, '', '', 4);
+                        const autoTName = CONTENT_TYPES[autoT]?.shortName || '유형 04';
+                        return `<option value="${escapeHtml(tag)}" ${w.keyword === tag ? 'selected' : ''}>[${escapeHtml(autoTName)}] ${escapeHtml(tag)}</option>`;
+                      }).join('')}
+                    </select>
+                  </div>
+
                   <div class="flex-row mb-8" style="gap: 6px;">
-                    <input type="text" class="input" id="leftSearchKwInput" value="${escapeHtml(w.keyword)}" placeholder="키워드 입력" style="flex: 1; padding: 7px 10px;" />
+                    <input type="text" class="input" id="leftSearchKwInput" value="${escapeHtml(w.keyword)}" placeholder="새 키워드 직접 입력" style="flex: 1; padding: 7px 10px;" />
                     <input type="text" class="input" id="leftSearchCompInput" value="${escapeHtml(w.inputCompany || '')}" placeholder="기업명(선택)" style="width: 92px; padding: 7px 10px;" />
                   </div>
-                  <div class="flex-between mb-8">
-                    <button type="button" class="btn btn-sm" id="leftFetchMemoOnlyBtn">+ 팩트만 메모장에 추가</button>
-                    <button type="button" class="btn btn-sm btn-outline-orange" id="leftRebuildDraftBtn">이 키워드로 기사 새로 쓰기 →</button>
-                  </div>
-                  <div style="font-size: 11.5px; color: var(--text-muted); line-height: 1.65;">
-                    <span style="font-weight: 700; color: var(--text-secondary); margin-right: 4px;">인기 키워드 빠른 전환:</span>
-                    ${quickTrendTags.map(tag => `
-                      <button type="button" class="text-action" style="font-size: 11.5px; color: var(--text-secondary); margin-right: 4px;" data-quick-trend="${escapeHtml(tag)}">
-                        #${escapeHtml(tag)}
-                      </button>
-                    `).join('')}
-                  </div>
+
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-orange"
+                    id="leftRebuildDraftBtn"
+                    style="width: 100%; justify-content: center; padding: 8px 12px; font-weight: 800;"
+                    ${state.isRefreshingInEditor ? 'disabled' : ''}
+                  >
+                    ${state.isRefreshingInEditor ? '⏳ 실시간 뉴스·Perplexity로 기사 새로 작성 중...' : '🔄 위 키워드로 오른쪽 기사 전체 새로 쓰기 →'}
+                  </button>
                 </div>
 
                 <div>
-                  <div class="flex-between mb-6">
-                    <strong style="font-size: 13.5px; font-weight: 800;">📌 취재 팩트 메모장 (매경 문체)</strong>
-                    <span style="font-size: 12px; color: var(--mk-orange); font-weight: 800;">총 ${(w.researchItems || []).length}건</span>
+                  <div class="flex-between mb-6" style="flex-wrap: wrap; gap: 4px;">
+                    <strong style="font-size: 13.5px; font-weight: 800;">📌 취재 팩트 메모장 (${(w.researchItems || []).length}건)</strong>
+                    <button
+                      type="button"
+                      class="text-action-orange"
+                      id="leftFetchMemoOnlyBtn"
+                      style="font-size: 11.5px; font-weight: 800;"
+                      title="오른쪽 작성 중인 기사는 그대로 두고, 위 검색창 키워드의 최신 뉴스 문장만 이 메모장에 추가로 가져옵니다"
+                      ${state.isRefreshingInEditor ? 'disabled' : ''}
+                    >
+                      ${state.isRefreshingInEditor ? '⏳ 뉴스 수집 중...' : '📰 최신 뉴스 문장만 메모장에 더 불러오기'}
+                    </button>
                   </div>
                   <p class="text-muted mb-8" style="line-height: 1.45;">
-                    보도자료·외부 기사 문장을 붙여넣으면 타 언론사 표현을 배제하고 <strong>매경 Pick 경어체("~합니다")</strong>로 자동 다듬어 원하는 단락에 넣어줍니다.
+                    오른쪽 작성 중인 기사는 그대로 유지하면서, 추가할 보도자료 문장이나 최신 뉴스 팩트를 <strong>매경 경어체("~합니다")</strong>로 다듬어 원하는 단락에 끼워 넣는 메모장입니다.
                   </p>
 
                   <div class="mb-12" style="padding: 10px; background-color: var(--bg-subtle); border: var(--border-thin); border-radius: var(--radius-general);">
@@ -2022,10 +2042,24 @@
                 ${escapeHtml(sb.oneLineSummary || '')}
               </div>
 
-              <div style="font-size: 12.5px; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-top: 12px; border-top: var(--border-thin);">
+              <div style="font-size: 12.5px; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-top: 12px; border-top: var(--border-thin); margin-bottom: 18px;">
                 <span>${escapeHtml(sb.imageRecommendations?.[0]?.caption || '< 출처 : 각 사 제공 >')}</span>
                 <span>${escapeHtml(sb.noticeText || '')}</span>
               </div>
+
+              ${(w.sources || []).filter(s => !s.excluded).length > 0 ? `
+                <div style="padding: 14px 16px; background-color: var(--bg-subtle); border: var(--border-thin); border-radius: var(--radius-general);">
+                  <div style="font-size: 13px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">🔗 [참고 자료 및 실시간 검증 출처 목록]</div>
+                  <div style="display: flex; flex-direction: column; gap: 6px;">
+                    ${(w.sources || []).filter(s => !s.excluded).map((s, idx) => `
+                      <div style="font-size: 12.5px; color: var(--text-secondary); display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                        <span><strong>${idx + 1}.</strong> ${escapeHtml(s.title || s.url)}</span>
+                        ${s.url ? `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer" class="text-action-orange" style="white-space: nowrap;">원문 열기 ↗</a>` : ''}
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              ` : ''}
             </div>
           ` : `
             <!-- ============================================================== -->
@@ -2298,7 +2332,7 @@
                   <textarea class="doc-editable-textarea" id="docOneLine" rows="2" style="font-size: 14.5px; font-weight: 800;">${escapeHtml(sb.oneLineSummary || '')}</textarea>
                 </div>
 
-                <div class="grid-2" style="padding-top: 10px; border-top: var(--border-thin);">
+                <div class="grid-2" style="padding-top: 10px; border-top: var(--border-thin); margin-bottom: 16px;">
                   <div>
                     <label class="text-muted" style="display: block; margin-bottom: 4px; font-weight: 700;">대표 이미지 캡션 문구</label>
                     <input type="text" class="doc-editable-input" id="docImgCaption" value="${escapeHtml(sb.imageRecommendations?.[0]?.caption || '< 출처 : 각 사 제공 >')}" style="font-size: 12.5px; color: var(--text-secondary);" />
@@ -2306,6 +2340,57 @@
                   <div>
                     <label class="text-muted" style="display: block; margin-bottom: 4px; font-weight: 700;">하단 고지 문구</label>
                     <input type="text" class="doc-editable-input" id="docNotice" value="${escapeHtml(sb.noticeText || '')}" style="font-size: 12.5px; color: var(--text-muted);" />
+                  </div>
+                </div>
+
+                <!-- 참고 자료 및 출처 목록 (원문 대조 팩트체크 및 CMS 복사 포함/제외 관리) -->
+                <div style="padding-top: 14px; border-top: var(--border-thin);">
+                  <div class="flex-between mb-6" style="flex-wrap: wrap; gap: 6px;">
+                    <div>
+                      <strong style="font-size: 13.5px; font-weight: 800; color: var(--text-primary);">
+                        🔗 참고 자료 및 실시간 검증 출처 목록 (${(w.sources || []).filter(s => !s.excluded).length}/${(w.sources || []).length}건 포함)
+                      </strong>
+                      <span class="text-muted" style="margin-left: 6px;">
+                        · 우측 [원문 열기 ↗]를 눌러 실제 보도·출처 팩트를 대조하고, 체크박스로 기사 하단 표기 여부를 선택하세요.
+                      </span>
+                    </div>
+                  </div>
+
+                  ${(w.sources || []).length === 0 ? `
+                    <div class="text-muted" style="padding: 10px 0;">등록된 참고 출처가 없습니다. 아래에서 참고 URL을 추가할 수 있습니다.</div>
+                  ` : `
+                    <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;">
+                      ${(w.sources || []).map((src, sIdx) => {
+                        const isIncluded = !src.excluded;
+                        return `
+                          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border: var(--border-thin); border-radius: var(--radius-general); background-color: ${isIncluded ? 'var(--bg-subtle)' : 'var(--white)'}; opacity: ${isIncluded ? '1' : '0.6'};">
+                            <label style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; cursor: pointer;">
+                              <input type="checkbox" data-toggle-src-exclude="${escapeHtml(src.id)}" ${isIncluded ? 'checked' : ''} style="accent-color: var(--mk-orange); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0;" />
+                              <span style="font-size: 11px; font-weight: 700; color: var(--mk-orange); background-color: var(--mk-orange-light); padding: 1px 6px; border-radius: 4px; white-space: nowrap; flex-shrink: 0;">
+                                ${escapeHtml(src.method || `출처 #${sIdx + 1}`)}
+                              </span>
+                              <span style="font-size: 12.5px; color: var(--text-primary); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(src.title || src.url)}">
+                                ${escapeHtml(src.title || src.url)}
+                              </span>
+                            </label>
+                            <div class="flex-row" style="gap: 8px; flex-shrink: 0;">
+                              ${src.url ? `
+                                <a href="${escapeHtml(src.url)}" target="_blank" rel="noopener noreferrer" class="text-action-orange" style="font-size: 12px; font-weight: 800; white-space: nowrap;">
+                                  원문 열기 ↗
+                                </a>
+                              ` : ''}
+                              <button type="button" class="text-action" data-del-src="${escapeHtml(src.id)}" style="font-size: 11.5px; color: var(--text-muted);">삭제</button>
+                            </div>
+                          </div>
+                        `;
+                      }).join('')}
+                    </div>
+                  `}
+
+                  <div class="flex-row" style="gap: 6px;">
+                    <input type="text" class="input" id="newSourceTitleInput" placeholder="추가할 출처 제목/설명 (예: 통계청 2026 소비동향)" style="flex: 1; padding: 6px 10px; font-size: 12px;" />
+                    <input type="url" class="input" id="newSourceUrlInput" placeholder="출처 URL (https://...)" style="flex: 1; padding: 6px 10px; font-size: 12px;" />
+                    <button type="button" class="btn btn-sm" id="addSourceDirectBtn" style="font-weight: 700; white-space: nowrap;">+ 출처 추가</button>
                   </div>
                 </div>
               </section>
@@ -2466,85 +2551,107 @@
         showToast('검색할 키워드를 입력해 주세요.');
         return;
       }
-      showToast(`'${kw}' 관련 최신 뉴스에서 핵심 팩트만 추출해 매경 문체로 재구성 중입니다...`);
+      const nextTypeId = customKeyword ? detectBestContentType(kw, comp, '', w.typeId) : w.typeId;
+      state.isRefreshingInEditor = true;
+      showToast(
+        rebuildDraft
+          ? `⏳ '${kw}' 키워드로 오른쪽 기사 전체를 새로 작성하고 있습니다...`
+          : `⏳ '${kw}' 관련 최신 뉴스 문장을 취재 메모장에 추가로 불러오고 있습니다...`
+      );
+      render(true);
       try {
         const res = await apiFetch(`/api/works/${w.id}/refresh-news`, {
           method: 'POST',
           body: JSON.stringify({
             keyword: kw,
             company: comp,
-            typeId: w.typeId,
-            rebuildDraft
+            typeId: nextTypeId,
+            autoMatchType: Boolean(customKeyword),
+            rebuildDraft,
+            existingSources: w.sources || [],
+            existingResearchItems: w.researchItems || []
           })
         });
+        state.isRefreshingInEditor = false;
         state.currentWork = res.work;
         const idx = state.works.findIndex(item => item.id === w.id);
         if (idx !== -1) state.works[idx] = res.work;
+        else state.works.unshift(res.work);
+        saveCurrentWork(true);
+        await loadConfig();
         showToast(
           rebuildDraft
-            ? `✓ '${kw}' 최신 팩트 ${res.liveNewsCount}건을 바탕으로 오른쪽 기사 전체를 새로 작성했습니다!`
-            : `✓ '${kw}' 최신 팩트 ${res.liveNewsCount}건을 매경 문체로 다듬어 취재 메모장에 추가했습니다!`
+            ? `✓ '${kw}' 최신 팩트 ${res.liveNewsCount || ''}건을 바탕으로 오른쪽 기사 전체를 새로 작성했습니다!`
+            : `✓ '${kw}' 최신 뉴스 문장 ${res.liveNewsCount || ''}건을 매경 문체로 다듬어 취재 메모장에 추가했습니다!`
         );
         render(true);
       } catch (err) {
-        // GitHub Pages 정적 배포 환경: 브라우저에서 Perplexity API 직접 호출로 팩트/기사 갱신
-        const clientKey = getClientPerplexityKey();
-        if (clientKey) {
-          try {
-            let baseScen = (buildDynamicScenario || buildPresetScenario)({
-              keyword: kw,
-              company: comp,
-              url: w.inputUrl || '',
-              rawText: w.inputRawText || '',
-              selectedType: w.typeId
-            });
-            const enhanced = await buildClientPerplexityEnhancedScenario({
-              apiKey: clientKey,
-              keyword: kw,
-              company: comp,
-              url: w.inputUrl || '',
-              rawText: w.inputRawText || '',
-              typeId: w.typeId,
-              baseScenario: baseScen
-            });
-            w.keyword = kw;
-            w.inputCompany = comp;
-            w.sources = enhanced.sources;
-            w.researchItems = enhanced.researchItems;
-            if (rebuildDraft) {
-              w.titleCandidates = enhanced.titleCandidates;
-              w.title = enhanced.titleCandidates?.[0]?.title || w.title;
-              w.draftSections = enhanced.draftSections;
-              w.summaryBlocks = enhanced.summaryBlocks;
-              w.factChecks = enhanced.factChecks;
+        // 정적 배포(GitHub Pages) 또는 폴백: 브라우저에서 직접 시나리오 생성/갱신
+        try {
+          let baseScen = (buildDynamicScenario || buildPresetScenario)({
+            keyword: kw,
+            company: comp,
+            url: w.inputUrl || '',
+            rawText: w.inputRawText || '',
+            selectedType: nextTypeId
+          });
+          const clientKey = getClientPerplexityKey();
+          if (clientKey) {
+            try {
+              baseScen = await buildClientPerplexityEnhancedScenario({
+                apiKey: clientKey,
+                keyword: kw,
+                company: comp,
+                url: w.inputUrl || '',
+                rawText: w.inputRawText || '',
+                typeId: nextTypeId,
+                baseScenario: baseScen
+              });
+            } catch (pplxErr) {
+              console.warn('Client refresh fallback:', pplxErr.message);
             }
-            saveCurrentWork(true);
-            showToast(
-              rebuildDraft
-                ? `✓ Perplexity 실시간 검색으로 '${kw}' 기사 전체를 새로 작성했습니다!`
-                : `✓ Perplexity 실시간 검색으로 '${kw}' 최신 팩트를 취재 메모장에 추가했습니다!`
-            );
-            render(true);
-            return;
-          } catch (pplxErr) {
-            console.warn('Client refresh fallback:', pplxErr.message);
           }
+          w.keyword = kw;
+          w.inputCompany = comp;
+          w.typeId = nextTypeId;
+          if (rebuildDraft) {
+            w.sources = baseScen.sources;
+            w.researchItems = baseScen.researchItems;
+            w.titleCandidates = baseScen.titleCandidates;
+            w.title = baseScen.titleCandidates?.[0]?.title || w.title;
+            w.draftSections = baseScen.draftSections;
+            w.summaryBlocks = baseScen.summaryBlocks;
+            w.factChecks = baseScen.factChecks;
+          } else {
+            w.sources = [...(baseScen.sources || []), ...(w.sources || [])];
+            w.researchItems = [...(baseScen.researchItems || []), ...(w.researchItems || [])];
+          }
+          state.isRefreshingInEditor = false;
+          saveCurrentWork(true);
+          showToast(
+            rebuildDraft
+              ? `✓ '${kw}' 키워드로 오른쪽 기사 전체를 새로 작성했습니다!`
+              : `✓ '${kw}' 최신 팩트를 취재 메모장에 추가했습니다!`
+          );
+          render(true);
+        } catch (fallbackErr) {
+          state.isRefreshingInEditor = false;
+          showToast(err.message);
+          render(true);
         }
-        showToast(err.message);
       }
     }
 
     document.getElementById('leftFetchMemoOnlyBtn')?.addEventListener('click', () => triggerLiveNewsRefresh(false));
     document.getElementById('leftRebuildDraftBtn')?.addEventListener('click', () => triggerLiveNewsRefresh(true));
 
-    // 왼쪽 패널: 인기 트렌드 태그 클릭 시 바로 오른쪽 기사 재작성
-    root.querySelectorAll('[data-quick-trend]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tag = btn.getAttribute('data-quick-trend');
-        const kwEl = document.getElementById('leftSearchKwInput');
-        if (kwEl) kwEl.value = tag;
-        triggerLiveNewsRefresh(true, tag);
-      });
+    // 왼쪽 패널: 인기 키워드 드롭다운 선택 시 즉시 해당 키워드로 오른쪽 기사 새로 쓰기
+    document.getElementById('leftQuickTrendSelect')?.addEventListener('change', e => {
+      const pickedTag = (e.target.value || '').trim();
+      if (!pickedTag) return;
+      const kwEl = document.getElementById('leftSearchKwInput');
+      if (kwEl) kwEl.value = pickedTag;
+      triggerLiveNewsRefresh(true, pickedTag);
     });
 
     // 왼쪽 패널: 취재 메모 직접 추가 (타 언론사 문구를 붙여넣어도 매경 문체로 자동 패러프레이징!)
@@ -2939,6 +3046,49 @@
     document.getElementById('docNotice')?.addEventListener('input', e => {
       sb.noticeText = e.target.value;
       saveCurrentWork(true);
+    });
+
+    // STEP 08: 참고 자료 및 출처 목록 체크박스 토글 / 삭제 / 직접 추가
+    root.querySelectorAll('[data-toggle-src-exclude]').forEach(chk => {
+      chk.addEventListener('change', () => {
+        const srcId = chk.getAttribute('data-toggle-src-exclude');
+        const foundSrc = (w.sources || []).find(s => s.id === srcId);
+        if (foundSrc) {
+          foundSrc.excluded = !chk.checked;
+          saveCurrentWork(true);
+          render(true);
+        }
+      });
+    });
+
+    root.querySelectorAll('[data-del-src]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const srcId = btn.getAttribute('data-del-src');
+        w.sources = (w.sources || []).filter(s => s.id !== srcId);
+        saveCurrentWork(false);
+        render(true);
+      });
+    });
+
+    document.getElementById('addSourceDirectBtn')?.addEventListener('click', () => {
+      const titleVal = document.getElementById('newSourceTitleInput')?.value.trim() || '';
+      const urlVal = document.getElementById('newSourceUrlInput')?.value.trim() || '';
+      if (!titleVal && !urlVal) {
+        showToast('추가할 출처 제목이나 URL을 입력해 주세요.');
+        return;
+      }
+      w.sources = w.sources || [];
+      w.sources.push({
+        id: 'src-custom-' + Date.now(),
+        url: urlVal,
+        title: titleVal || urlVal,
+        method: '직접 추가 출처',
+        reliability: '높음',
+        excluded: false
+      });
+      saveCurrentWork(false);
+      showToast('참고 출처가 STEP 08 목록에 추가되었습니다.');
+      render(true);
     });
   }
 

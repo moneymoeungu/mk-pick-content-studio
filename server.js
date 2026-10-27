@@ -950,15 +950,37 @@ const requestHandler = async (req, res) => {
       const body = await parseBody(req);
       const db = readDb();
       const apiKey = db.config?.perplexityApiKey || '';
-      const idx = db.works.findIndex(w => w.id === workId);
-      if (idx === -1) return sendJson(res, 404, { error: '작업을 찾을 수 없습니다.' });
+      let idx = db.works.findIndex(w => w.id === workId);
+      if (idx === -1) {
+        const seedScenario = buildPresetScenario({
+          keyword: (body.keyword || '최신 트렌드').trim(),
+          company: (body.company || '').trim(),
+          url: '',
+          selectedType: Number(body.typeId) || 4
+        });
+        const newEntry = createWorkObject({
+          id: workId,
+          typeId: Number(body.typeId) || 4,
+          keyword: (body.keyword || '최신 트렌드').trim(),
+          company: (body.company || '').trim(),
+          url: '',
+          rawText: '',
+          scenario: seedScenario
+        });
+        if (Array.isArray(body.existingSources)) newEntry.sources = body.existingSources;
+        if (Array.isArray(body.existingResearchItems)) newEntry.researchItems = body.existingResearchItems;
+        db.works.unshift(newEntry);
+        idx = 0;
+      }
 
       const current = db.works[idx];
       const keyword = (body.keyword || current.keyword).trim();
       const company = (body.company !== undefined ? body.company : current.inputCompany || '').trim();
       const url = (body.url !== undefined ? body.url : current.inputUrl || '').trim();
       const rawText = (body.rawText !== undefined ? body.rawText : current.rawText || '').trim();
-      const typeId = Number(body.typeId || current.typeId || 2);
+      const autoMatch = Boolean(body.autoMatchType);
+      const rawTypeId = Number(body.typeId || current.typeId || 4);
+      const typeId = autoMatch ? detectBestContentType(keyword, company, rawText, rawTypeId) : rawTypeId;
       const rebuildDraft = Boolean(body.rebuildDraft);
 
       const searchQuery = company ? `${keyword} ${company}` : keyword;
