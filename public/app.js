@@ -9,6 +9,8 @@
     detectBestContentType,
     recommendMkPickCategory,
     paraphraseNewsToMkFact,
+    isVirtualIdolQuery,
+    getVirtualIdolScenario,
     buildPresetScenario,
     buildDynamicScenario,
     createWorkObject,
@@ -260,31 +262,35 @@
   }
 
   async function buildClientPerplexityEnhancedScenario({ apiKey, keyword, company, url, rawText, typeId, baseScenario }) {
+    if (isVirtualIdolQuery && isVirtualIdolQuery(keyword, company)) {
+      const vi = getVirtualIdolScenario(keyword);
+      return { ...vi, usedPerplexity: true };
+    }
     const tInfo = CONTENT_TYPES[typeId] || CONTENT_TYPES[4];
     const typeInstructions = {
-      1: '유형 1(유료 업체 타겟팅 기획 콘텐츠): 1단락은 과거 일괄 방식 vs 현재 맞춤형 시대별 변화 비교, 2단락은 타깃 파트너사 및 주요 기업 4곳의 핵심 서비스·혜택 집중 소개, 3단락은 실패 없는 업체 선택 기준. 요약표는 업체별 서비스·혜택·추천대상 비교표, FAQ는 7문항.',
-      2: '유형 2(특정 기념일 관련 콘텐츠): 1단락은 기념일 유래·법적 지정 배경, 2단락은 정부·지자체 공식 지원 제도 및 바우처, 3단락은 이 기념일을 맞아 참여하는 주요 브랜드 3~5곳을 선정해 반드시 본문 안에 "■ [브랜드명] 캠페인·제품·마케팅명" 형태의 소항목으로 나누어 각 브랜드별 프로모션·제품·ESG 활동을 구체적으로 각각 소개할 것. 요약표는 브랜드별 캠페인/제품·혜택·참여조건·기간 비교표, FAQ는 5문항.',
-      3: '유형 3(최신 트렌드 반영 콘텐츠 1 - SNS·숏폼 바이럴 확장): 1단락은 과거 원조 유행부터 현재까지 연대별 계보, 2단락은 MZ세대가 열광하는 소비 심리 4가지 분석, 3단락은 목적형 소비 진화와 문화·유통 시사점. 요약표는 세대·시기별 유행 아이템 비교표, FAQ는 5문항.',
-      4: '유형 4(최신 트렌드 반영 콘텐츠 2 - 신제품 출시를 거시적 마케팅 키워드로 재정의): 1단락은 개별 신제품들을 관통하는 거시적 마케팅 콘셉트 도출, 2단락은 브랜드·유통 채널별 전용 라인업 및 사례 비교, 3단락은 품절 대란 속 입고 시간·구매 팁과 시사점. 요약표는 브랜드·채널별 라인업·차별점·구매팁 비교표, FAQ는 5문항.',
-      5: '유형 5(영업 기업 맞춤 기획 콘텐츠): 1단락은 독자 질문 도입 1문단 뒤 Q1~Q4 시장 메가 트렌드·소비자 페인포인트 문답, 2단락은 Q5~Q6 선택 기준 문답 후 마지막 Q7에서 영업 타깃 기업의 핵심 솔루션·경쟁력을 집중 소개. 요약표는 대상 기업 핵심 기능·기대효과 요약표, FAQ는 7문항.'
+      1: '유형 1(유료 업체 타겟팅 기획 콘텐츠): 1단락은 과거 일괄 방식 vs 현재 맞춤형 시대별 변화 비교, 이후 단락들은 타깃 파트너사 및 주요 기업 3~4곳을 각각 독립 단락("기업명 ‘핵심 서비스 한 줄 정의’")으로 하나씩 심층 소개, 마지막 단락은 실패 없는 선택 기준. 요약표는 5열 비교표, 용어 사전 5개, FAQ는 7문항.',
+      2: '유형 2(특정 기념일 관련 콘텐츠): 1단락은 기념일 유래·법적 지정 배경, 2단락은 정부·지자체 공식 지원 제도 및 바우처, 이후 단락들은 참여 브랜드 3~5곳을 하나씩 독립 단락 또는 "■ [브랜드명] 캠페인·제품·마케팅명" 소항목으로 구체적으로 소개. 요약표는 5열 비교표, 용어 사전 5개, FAQ는 5문항.',
+      3: '유형 3(최신 트렌드 반영 콘텐츠 1 - 시대별 타임라인 계보 & 대표 주자 1:1 심층 조명): 1~2단락은 초창기 원조 개척자부터 현재 전성기까지의 타임라인("연도/시기 : 소재명 ‘한 줄 정의’" 소제목 + 본문 내 "탄생 배경과 이유 :", "활동 방식의 한계 :", "달라진 점 :" 라벨 포함), 3~6단락은 대표 주자 3~4곳을 하나씩 독립 단락("주자명 (영문) ‘핵심 상징 한 줄 정의’")으로 쪼개어 서사·성과·콜라보 심층 소개, 마지막 단락은 "Bonus Track : ..." 유쾌한 외전·밈 소개. 요약표는 5열 상세 비교표, 용어 사전 5개, FAQ 5문항, 수미상관 에필로그 필수.',
+      4: '유형 4(최신 트렌드 반영 콘텐츠 2 - 신제품·팝업을 거시적 마케팅 키워드로 재정의): 1단락은 감성적 질문 리드와 거시적 마케팅 콘셉트 도출, 2~5단락은 주요 브랜드·유통 채널별 대표 라인업 3~4곳을 하나씩 독립 단락("브랜드·제품명 ‘차별화 포인트 한 줄 정의’")으로 심층 소개, 마지막 단락은 "Bonus Track" 또는 구매 팁. 요약표는 5열 비교표, 용어 사전 5개, FAQ는 5문항.',
+      5: '유형 5(영업 기업 맞춤 기획 콘텐츠): 1단락은 독자 질문 도입 1문단 뒤 Q1~Q4 시장 메가 트렌드·페인포인트 문답, 2단락은 Q5~Q6 선택 기준 문답, 3단락은 Q7 영업 타깃 기업 집중 소개. 요약표는 5열 요약표, 용어 사전 5개, FAQ는 7문항.'
     };
     const faqCount = (typeId === 1 || typeId === 5) ? 7 : 5;
     const fallbackCat = recommendMkPickCategory(keyword, typeId, company);
 
-    const sys = `당신은 매일경제 MK Pick(GEO·AEO 최적화 기사) 전문 기자입니다.
-타 언론사 기사의 문장을 절대 그대로 베끼지 말고, 수치·브랜드명·날짜 등 핵심 팩트만 추출하여 모든 본문과 답변을 매일경제 고유의 정중하고 분석적인 "~합니다/습니다" 체로 작성하세요.
-1) "산업 Q&A", 2) "제품·기술", 3) "성공사례", 4) "기업뉴스", 5) "브랜드스토리(기업관)" 중 가장 적합한 1개를 "mkCategory"로 추천하세요.
-- 본문 각 단락의 소제목(draftSections[].title)은 번호 없이 독자의 호기심을 자극하는 한 줄 질문형 소제목(~할까요? / ~인가요?)으로 작성하세요.
-- FAQ 질문(faqs[].q)은 실제 독자가 검색창에 물어볼 법한 구어체 자연어 질문으로 총 ${faqCount}문항을 작성하고, 답변(faqs[].a)은 구체적인 수치·장소·조건을 포함한 2문장("~합니다/습니다" 체)으로 작성하세요.
-반드시 순수 JSON 객체만 출력하세요.`;
+    const sys = `당신은 매일경제 MK Pick(GEO·AEO 최적화 매거진형 심층 기사) 수석 에디터입니다.
+타 언론사 기사의 문장을 절대 그대로 베끼지 말고, 수치·브랜드명·멤버명·콜라보 연도 등 핵심 팩트만 추출하여 모든 본문과 답변을 매일경제 고유의 정중하고 생동감 있는 "~합니다/습니다" 체로 작성하세요.
+1) 첫 단락은 그 시절의 향수나 생생한 장면을 묘사하는 감성적 질문으로 시작하고 기사 전체 타임라인 가이드를 제시하세요.
+2) 시대별 배경 단락에는 "탄생 배경과 이유 :", "활동 방식의 한계 :", "달라진 점 :" 같은 소항목 라벨을 활용하세요.
+3) 하나의 주제에 여러 소재/그룹/브랜드가 나오면 절대 3단락에 뭉뚱그리지 말고 하나씩 독립 단락(draftSections 총 5~7개)으로 쪼개어 "주자명 (영문) ‘핵심 상징 한 줄 정의’" 소제목으로 심층 소개하고, 마지막에 "Bonus Track : ..." 외전 단락을 포함하세요.
+4) 5열 비교 요약표(summaryTable), 핵심 용어 사전(glossary 5개), FAQ ${faqCount}문항, 수미상관 마무리 총평 문단(closingParagraph) + 한 줄 요약(oneLineSummary)을 포함한 순수 JSON 객체만 출력하세요.`;
 
     const usr = `[작성 요청 정보]
 - 키워드/주제: ${keyword}
-- 타깃 기업/브랜드(선택): ${company || '관련 주요 기업·브랜드'}
+- 타깃 기업/브랜드(선택): ${company || '관련 대표 주자·브랜드'}
 - 참고 URL: ${url || '없음'}
 - 추가 보도자료/메모: ${rawText || '없음'}
 - 선택된 콘텐츠 유형: ${tInfo.shortName} (${tInfo.desc})
-- 유형별 필수 구성 지침: ${typeInstructions[typeId] || typeInstructions[4]}
+- 유형별 필수 구성 지침: ${typeInstructions[typeId] || typeInstructions[3]}
 
 아래 JSON 스키마에 맞춰 한국어로 작성하세요:
 {
@@ -310,23 +316,36 @@
     "3. 핵심 팩트 요약 세 번째 문장 (~합니다 체)"
   ],
   "draftSections": [
-    {"id": "sec-1", "title": "독자 호기심을 자극하는 첫 번째 질문형 소제목 (~할까요?)", "content": "첫 문장은 독자에게 말을 거는 질문형으로 시작하고 구체적인 수치·브랜드 팩트를 담아 2~3문단(~합니다 체)으로 작성"},
-    {"id": "sec-2", "title": "독자 호기심을 자극하는 두 번째 질문형 소제목 (~인가요?)", "content": "구체적 기업·브랜드 사례, 수치, 비교 내용을 2~3문단(~합니다 체)으로 상세히 작성"},
-    {"id": "sec-3", "title": "독자 호기심을 자극하는 세 번째 질문형 소제목 (~무엇인가요?)", "content": "유형 지침에 맞춘 세 번째 단락 내용 (~합니다 체)"}
+    {"id": "sec-1", "title": "초창기 시대·배경 소제목 (예: 1998년 : 사이버 가수 ‘아담’ 시대를 앞서간 개척자)", "content": "감성적 질문 리드 + '탄생 배경과 이유 : ...' 및 '활동 방식의 한계 : ...' 포함 2~3문단 (~합니다 체)", "imageCaption": "< 출처 : 관련 아카이브 >"},
+    {"id": "sec-2", "title": "전환기 및 전성기 소제목", "content": "'달라진 점 : ...' 라벨 포함 진화 과정 및 대표 주자 브릿지 질문 (~합니다 체)", "imageCaption": "< 출처 : 관련 기업 >"},
+    {"id": "sec-3", "title": "대표 주자 1 이름 ‘핵심 상징 한 줄 정의’", "content": "대표 주자 1의 탄생 배경·성과·대기업 콜라보 상세 서술 (~합니다 체)", "imageCaption": "< 출처 : 공식 채널 >"},
+    {"id": "sec-4", "title": "대표 주자 2 이름 ‘핵심 상징 한 줄 정의’", "content": "대표 주자 2의 핵심 이정표·대중성·협업 사례 상세 서술 (~합니다 체)", "imageCaption": "< 출처 : 공식 채널 >"},
+    {"id": "sec-5", "title": "대표 주자 3 이름 ‘핵심 상징 한 줄 정의’", "content": "대표 주자 3 및 신예 주자의 세계관·특징 상세 서술 (~합니다 체)", "imageCaption": "< 출처 : 공식 채널 >"},
+    {"id": "sec-6", "title": "Bonus Track : 유쾌한 외전 또는 밈(Meme) 주역", "content": "'독창적 콘셉트 : ...' 라벨을 활용한 유쾌한 외전·부캐·밈 사례 소개 (~합니다 체)", "imageCaption": "< 출처 : 공식 SNS >"}
   ],
   "summaryTable": {
-    "title": "[요약표] 유형에 맞는 비교표 제목",
-    "headers": ["구분1", "구분2", "구분3", "구분4"],
+    "title": "[ 대표 주자 핵심 비교 ]",
+    "headers": ["구분", "유형 및 구성", "탄생 배경 및 특징", "주요 성과", "팬덤 및 주요 협업"],
     "rows": [
-      ["행1-1", "행1-2", "행1-3", "행1-4"],
-      ["행2-1", "행2-2", "행2-3", "행2-4"],
-      ["행3-1", "행3-2", "행3-3", "행3-4"]
+      ["주자 1", "구체적 형태·멤버", "탄생 배경 요약", "핵심 기록·성과", "대표 브랜드 콜라보(연도 포함)"],
+      ["주자 2", "구체적 형태·멤버", "탄생 배경 요약", "핵심 기록·성과", "대표 브랜드 콜라보(연도 포함)"],
+      ["주자 3", "구체적 형태·멤버", "탄생 배경 요약", "핵심 기록·성과", "대표 브랜드 콜라보(연도 포함)"],
+      ["주자 4", "구체적 형태·멤버", "탄생 배경 요약", "핵심 기록·성과", "대표 브랜드 콜라보(연도 포함)"]
     ]
   },
-  "faqs": [
-    {"q": "Q1. 실제 독자가 검색창에 물어볼 법한 구어체 자연어 질문", "a": "구체적인 수치·장소·조건이 담긴 2문장 완결형 답변 (~합니다 체)"}
+  "glossaryTitle": "주제를 더 깊이 이해하는 용어 사전",
+  "glossary": [
+    {"term": "핵심 용어 1 (영문)", "desc": "누구나 이해하기 쉬운 1~2문장 개념 해설 (~합니다 체)"},
+    {"term": "핵심 용어 2 (영문)", "desc": "누구나 이해하기 쉬운 1~2문장 개념 해설 (~합니다 체)"},
+    {"term": "핵심 용어 3 (영문)", "desc": "누구나 이해하기 쉬운 1~2문장 개념 해설 (~합니다 체)"},
+    {"term": "핵심 용어 4 (영문)", "desc": "누구나 이해하기 쉬운 1~2문장 개념 해설 (~합니다 체)"},
+    {"term": "핵심 용어 5 (영문)", "desc": "누구나 이해하기 쉬운 1~2문장 개념 해설 (~합니다 체)"}
   ],
-  "oneLineSummary": "한 줄 요약! 전체 핵심 요약 1~2문장 (~합니다 체)"
+  "faqs": [
+    {"q": "Q1. 실제 독자가 검색창에 물어볼 법한 구어체 자연어 질문", "a": "구체적인 수치·장소·조건이 담긴 2~3문장 완결형 답변 (~합니다 체)"}
+  ],
+  "closingParagraph": "초창기 주역의 도전부터 현재 대표 주자들의 무대까지 수미상관으로 엮어 여운을 남기는 마무리 총평 2~3문장 (~합니다 체)",
+  "oneLineSummary": "한 줄 요약! “핵심 통찰 인용구” 앞으로 이들이 써 내려갈 새로운 역사가 더욱 기대되는 이유입니다."
 }`;
 
     const { parsed, citations } = await callPerplexityDirectFromBrowser(apiKey, sys, usr, 'month', 'draft');
@@ -357,14 +376,15 @@
     const draftSections = Array.isArray(parsed.draftSections) && parsed.draftSections.length > 0
       ? parsed.draftSections.map((sec, i) => ({
           id: `sec-${i + 1}`,
-          title: String(sec.title || `핵심 질문 ${i + 1}`).replace(/^\d+[\.\)]\s*/, ''),
+          title: String(sec.title || `핵심 단락 ${i + 1}`).replace(/^\d+[\.\)]\s*/, ''),
           content: sec.content || '',
+          imageCaption: sec.imageCaption || '',
           sourceIds: [mergedSources[0]?.id, mergedSources[1]?.id].filter(Boolean)
         }))
       : baseScenario.draftSections;
 
     const validCategories = MK_PICK_CATEGORIES.map(c => c.id);
-    const chosenCat = validCategories.includes(parsed.mkCategory) ? parsed.mkCategory : fallbackCat;
+    const chosenCat = validCategories.includes(parsed.mkCategory) ? parsed.mkCategory : fallbackCat.recommendedCategory || fallbackCat;
     const summaryBlocks = {
       ...baseScenario.summaryBlocks,
       mkCategory: chosenCat,
@@ -377,9 +397,14 @@
       summaryTable: parsed.summaryTable && Array.isArray(parsed.summaryTable.rows)
         ? parsed.summaryTable
         : baseScenario.summaryBlocks.summaryTable,
+      glossaryTitle: parsed.glossaryTitle || baseScenario.summaryBlocks.glossaryTitle || '주제를 더 깊이 이해하는 용어 사전',
+      glossary: Array.isArray(parsed.glossary) && parsed.glossary.length > 0
+        ? parsed.glossary
+        : (baseScenario.summaryBlocks.glossary || []),
       faqs: Array.isArray(parsed.faqs) && parsed.faqs.length > 0
         ? parsed.faqs
         : baseScenario.summaryBlocks.faqs,
+      closingParagraph: parsed.closingParagraph || baseScenario.summaryBlocks.closingParagraph || '',
       oneLineSummary: parsed.oneLineSummary || baseScenario.summaryBlocks.oneLineSummary
     };
 
@@ -452,17 +477,28 @@
     (w.draftSections || []).forEach(sec => {
       if (sec.title) lines.push(`■ ${sec.title}`);
       if (sec.content) lines.push(sec.content);
+      if (sec.imageCaption) lines.push(sec.imageCaption);
       lines.push('');
     });
 
     if (sb.summaryTable && sb.summaryTable.rows && sb.summaryTable.rows.length > 0) {
       lines.push(sb.summaryTable.title || '[요약표]');
-      lines.push((sb.summaryTable.headers || []).join(' | '));
+      lines.push((sb.summaryTable.headers || []).join('\t'));
       lines.push('-'.repeat(48));
       sb.summaryTable.rows.forEach(r => {
-        lines.push(r.join(' | '));
+        lines.push(r.join('\t'));
       });
       lines.push('');
+    }
+
+    if (sb.glossary && sb.glossary.length > 0) {
+      lines.push(`[${sb.glossaryTitle || '주제를 더 깊이 이해하는 용어 사전'}]`);
+      sb.glossary.forEach(g => {
+        if (g.term || g.desc) {
+          lines.push(`${g.term} : ${g.desc}`);
+          lines.push('');
+        }
+      });
     }
 
     if (sb.faqs && sb.faqs.length > 0) {
@@ -472,6 +508,11 @@
         lines.push(`A. ${f.a}`);
         lines.push('');
       });
+    }
+
+    if (sb.closingParagraph) {
+      lines.push(sb.closingParagraph);
+      lines.push('');
     }
 
     if (sb.oneLineSummary) {
@@ -1658,14 +1699,28 @@
       ...(state.trendRadar.googleTrends || []).slice(0, 2).map(t => t.keyword)
     ].filter((v, i, arr) => v && arr.indexOf(v) === i).slice(0, 8);
 
-    // 유형별 단락 역할 안내 라벨 (5대 콘텐츠 유형의 흐름을 각 단락에 직관적으로 표시)
-    const sectionRoleLabels = {
-      1: ['도입 · 소비자 불편과 의문 제기', '원인 · 업계 관행과 구조적 배경', '비교 · 대안 및 업계 대응 분석', '전망 · 소비자 선택 기준 제시'],
-      2: ['도입 · 기념일 유래와 사회적 의미', '트렌드 · 올해 시장·소비자 변화', '브랜드별 소개 · 참여 기업 캠페인·제품 총정리', '시사점 · 캠페인 참여 방법과 기대 효과'],
-      3: ['도입 · SNS·유튜브 화제 현상 포착', '분석 · 검색량·매출 급증과 인기 요인', '대응 · 유통·식품업계 신제품·마케팅 경쟁', '전망 · 유행 지속 가능성과 소비 팁'],
-      4: ['도입 · 현장 열기·신제품 핵심 화두', '차별점 · 핵심 기술·스펙·가격 경쟁력', '검증 · 소비자 반응 및 경쟁사 비교', '전망 · 시장 파급력과 향후 일정'],
-      5: ['도입 · 고정관념을 깬 브랜드 화두', '위기 · 당시 시장 한계와 도전 과제', '전환점 · 역발상 전략과 핵심 실행 비결', '성과 · 매출·점유율 데이터와 업계 교훈']
-    }[w.typeId] || ['도입 · 독자 공감 질문', '배경 · 핵심 원인 분석', '전개 · 주요 사례와 데이터', '결론 · 향후 전망과 시사점'];
+    // 유형별 및 에디터 스토리텔링 단락 역할 안내 라벨 (타임라인 · 개별 주자 스포트라이트 · Bonus Track 자동 인식)
+    function getSectionRoleLabel(sec, sIdx, totalLen) {
+      const titleStr = (sec?.title || '').trim();
+      if (/^Bonus\s*Track/i.test(titleStr) || titleStr.includes('외전') || titleStr.includes('매드몬스터')) {
+        return 'Bonus Track · 유쾌한 외전 & 밈(Meme)';
+      }
+      if (/^\d{4}년/.test(titleStr) || titleStr.includes('초창기') || titleStr.includes('전환기') || titleStr.includes('전성기')) {
+        return '시대별 타임라인 · 배경과 진화 과정';
+      }
+      if (totalLen >= 5 && sIdx >= 2) {
+        return '대표 주자 1:1 집중 조명 · 성과와 협업';
+      }
+      const roleMap = {
+        1: ['도입 · 시대별 트렌드 변화 비교', '대표 서비스 · 파트너사별 핵심 혜택', '비교 · 업체별 차별점 및 추천 대상', '전망 · 실패 없는 선택 기준 제시'],
+        2: ['도입 · 기념일 유래와 법적 의미', '제도 · 정부·지자체 공식 지원 바우처', '브랜드별 소개 · 참여 기업 캠페인·제품 총정리', '시사점 · 캠페인 참여 방법과 기대 효과'],
+        3: ['타임라인 · 초창기 원조와 탄생 배경', '생태계 진화 · 쌍방향 소통과 전성기', '대표 주자 집중 조명 · 팬덤과 콜라보 성과', 'Bonus Track · 파생 문화와 시사점'],
+        4: ['도입 · 거시적 마케팅 콘셉트 도출', '라인업 비교 · 브랜드·채널별 전용 상품', '현장 검증 · 소비자 반응 및 차별점', '구매 팁 · 입고 시간 및 사전 예약 가이드'],
+        5: ['도입 · 시장 메가 트렌드 Q1~Q4 문답', '해법 · 선택 기준 및 타깃 기업 Q5~Q7 집중 조명', '성과 · 핵심 기능과 기대효과 분석']
+      };
+      const list = roleMap[w.typeId] || roleMap[3];
+      return list[sIdx] || '심층 분석 · 대표 사례 집중 조명';
+    }
 
     root.innerHTML = `
       <!-- 상단 고정 액션 바: 스크롤 시에도 왼쪽·오른쪽 본문을 가리지 않도록 정밀 고정 -->
@@ -1922,12 +1977,16 @@
                     <span style="font-size: 12.5px; font-weight: 700;">STEP 06 · 핵심 비교 요약표 (${(sb.summaryTable?.rows || []).length}행)</span>
                     <span class="text-muted">이동 →</span>
                   </button>
+                  <button type="button" class="headline-pick-row" data-jump-block="block-step-glossary" style="text-align: left; border: var(--border-thin);">
+                    <span style="font-size: 12.5px; font-weight: 700;">📚 핵심 용어 사전 (${(sb.glossary || []).length}개 용어)</span>
+                    <span class="text-muted">이동 →</span>
+                  </button>
                   <button type="button" class="headline-pick-row" data-jump-block="block-step-7" style="text-align: left; border: var(--border-thin);">
                     <span style="font-size: 12.5px; font-weight: 700;">STEP 07 · 자연어 FAQ (${(sb.faqs || []).length}문항) & 팬아웃</span>
                     <span class="text-muted">이동 →</span>
                   </button>
                   <button type="button" class="headline-pick-row" data-jump-block="block-step-8" style="text-align: left; border: var(--border-thin);">
-                    <span style="font-size: 12.5px; font-weight: 700;">STEP 08 · 마무리 한 줄 요약 & 출처 고지</span>
+                    <span style="font-size: 12.5px; font-weight: 700;">STEP 08 · 마무리 총평 · 한 줄 요약 & 출처</span>
                     <span class="text-muted">이동 →</span>
                   </button>
                 </div>
@@ -1956,7 +2015,7 @@
               </div>
 
               ${(sb.companyTags || []).length > 0 ? `
-                <div class="flex-row mb-12" style="gap: 6px;">
+                <div class="flex-row mb-12" style="gap: 6px; flex-wrap: wrap;">
                   ${(sb.companyTags || []).map(t => `<span style="font-size: 12px; font-weight: 700; color: var(--mk-orange);">#${escapeHtml(t)}</span>`).join('')}
                 </div>
               ` : ''}
@@ -1982,6 +2041,11 @@
                     ${escapeHtml(sec.title)}
                   </h2>
                   <div style="font-size: 15.5px; line-height: 1.85; color: var(--text-primary); white-space: pre-line;">${escapeHtml(sec.content)}</div>
+                  ${sec.imageCaption ? `
+                    <div style="margin-top: 8px; font-size: 12.5px; color: var(--text-muted); font-weight: 600;">
+                      ${escapeHtml(sec.imageCaption)}
+                    </div>
+                  ` : ''}
                 </div>
               `).join('')}
 
@@ -2018,13 +2082,29 @@
                     <tbody>
                       ${(sb.summaryTable?.rows || []).map(row => `
                         <tr>
-                          ${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}
+                          ${row.map(cell => `<td style="white-space: pre-line;">${escapeHtml(cell)}</td>`).join('')}
                         </tr>
                       `).join('')}
                     </tbody>
                   </table>
                 </div>
               </div>
+
+              ${(sb.glossary || []).length > 0 ? `
+                <hr class="doc-divider" />
+                <div style="margin-bottom: 28px; padding: 16px 18px; background-color: var(--bg-subtle); border: var(--border-thin); border-radius: var(--radius-general);">
+                  <h3 style="font-size: 17px; font-weight: 800; margin-bottom: 12px; color: var(--text-primary);">
+                    📚 ${escapeHtml(sb.glossaryTitle || '주제를 더 깊이 이해하는 용어 사전')}
+                  </h3>
+                  <div style="display: flex; flex-direction: column; gap: 10px;">
+                    ${(sb.glossary || []).map(g => `
+                      <div style="font-size: 14.5px; line-height: 1.68; color: var(--text-primary);">
+                        <strong style="color: var(--mk-orange); font-weight: 800;">${escapeHtml(g.term)}</strong> : ${escapeHtml(g.desc)}
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              ` : ''}
 
               <hr class="doc-divider" />
 
@@ -2037,6 +2117,12 @@
                   </div>
                 `).join('')}
               </div>
+
+              ${sb.closingParagraph ? `
+                <div style="margin-bottom: 18px; font-size: 15.5px; line-height: 1.85; color: var(--text-primary); white-space: pre-line;">
+                  ${escapeHtml(sb.closingParagraph)}
+                </div>
+              ` : ''}
 
               <div style="border-left: 3px solid var(--mk-orange); padding-left: 14px; margin-bottom: 18px; font-size: 15px; font-weight: 800;">
                 ${escapeHtml(sb.oneLineSummary || '')}
@@ -2167,19 +2253,19 @@
                 </div>
               </section>
 
-              <!-- STEP 05: 본문 단락 (질문형 소제목 + 매경 경어체 본문 + 단락별 역할 배지·순서 이동·문체 교정) -->
+              <!-- STEP 05: 본문 단락 (시대별 타임라인 계보 / 1:1 대표 주자 조명 / 매경 경어체 본문 / 단락별 이미지 캡션) -->
               <section class="editor-block-section" id="block-step-5">
                 <div class="editor-step-header">
                   <div class="flex-row" style="gap: 8px;">
                     <span class="editor-step-badge">STEP 05 · 본문 단락 (${(w.draftSections || []).length}개 단락)</span>
-                    <span class="text-muted">독자 질문형 소제목("~할까요?")과 매경 Pick 경어체("~합니다") 본문으로 구성됩니다.</span>
+                    <span class="text-muted">시대별 타임라인·개별 주자 1:1 조명 소제목과 매경 Pick 경어체("~합니다") 본문으로 구성됩니다.</span>
                   </div>
                   <button type="button" class="btn btn-sm btn-outline-orange" id="addDocSectionBtn">+ 새 본문 단락 추가</button>
                 </div>
 
                 <div id="docSectionsContainer">
                   ${(w.draftSections || []).map((sec, sIdx) => {
-                    const roleLabel = sectionRoleLabels[sIdx] || `단락 0${sIdx + 1} · 심층 분석 및 사례`;
+                    const roleLabel = getSectionRoleLabel(sec, sIdx, (w.draftSections || []).length);
                     const secCharLen = (sec.content || '').length;
                     return `
                       <div style="padding: 14px 16px; border: var(--border-thin); border-radius: var(--radius-general); background-color: var(--bg-subtle); margin-bottom: 14px;" id="secWrap-${sec.id}">
@@ -2203,13 +2289,18 @@
                         </div>
 
                         <div class="mb-8">
-                          <label class="text-muted" style="display: block; margin-bottom: 3px; font-weight: 700;">■ 질문형 소제목</label>
-                          <input type="text" class="doc-editable-input doc-sec-title-input" data-doc-sec-title="${sec.id}" value="${escapeHtml(sec.title)}" placeholder="독자 호기심을 자극하는 질문형 소제목을 입력하세요" />
+                          <label class="text-muted" style="display: block; margin-bottom: 3px; font-weight: 700;">■ 단락 소제목 (시대 타임라인 / [주자명] ‘핵심 상징 정의’ / 질문형)</label>
+                          <input type="text" class="doc-editable-input doc-sec-title-input" data-doc-sec-title="${sec.id}" value="${escapeHtml(sec.title)}" placeholder="소제목을 입력하세요 (예: 플레이브 (PLAVE) ‘메인스트림 진입과 대중성’의 신기원)" />
+                        </div>
+
+                        <div class="mb-8">
+                          <label class="text-muted" style="display: block; margin-bottom: 3px; font-weight: 700;">본문 내용 ('탄생 배경과 이유 :', '달라진 점 :' 등 라벨 및 '~합니다' 체)</label>
+                          <textarea class="doc-editable-textarea doc-body-textarea" id="secBody-${sec.id}" data-doc-sec-body="${sec.id}" rows="5" placeholder="본문 내용을 '~합니다' 체로 입력하세요">${escapeHtml(sec.content)}</textarea>
                         </div>
 
                         <div>
-                          <label class="text-muted" style="display: block; margin-bottom: 3px; font-weight: 700;">본문 내용 ('~합니다' 체)</label>
-                          <textarea class="doc-editable-textarea doc-body-textarea" id="secBody-${sec.id}" data-doc-sec-body="${sec.id}" rows="5" placeholder="본문 내용을 '~합니다' 체로 입력하세요">${escapeHtml(sec.content)}</textarea>
+                          <label class="text-muted" style="display: block; margin-bottom: 3px; font-size: 11.5px; font-weight: 700;">단락 하단 이미지 출처 캡션 (선택 · 입력 시 해당 단락 아래에 표기)</label>
+                          <input type="text" class="doc-editable-input" data-doc-sec-caption="${sec.id}" value="${escapeHtml(sec.imageCaption || '')}" placeholder="예: < 출처 : 패러블 > 또는 비워두기" style="font-size: 12px; color: var(--text-secondary); background-color: var(--white);" />
                         </div>
                       </div>
                     `;
@@ -2262,6 +2353,34 @@
                       `).join('')}
                     </tbody>
                   </table>
+                </div>
+              </section>
+
+              <!-- STEP 06-B: 핵심 용어 사전 (MK Pick 에디터 스타일) -->
+              <section class="editor-block-section" id="block-step-glossary">
+                <div class="editor-step-header">
+                  <div class="flex-row" style="gap: 8px;">
+                    <span class="editor-step-badge">📚 핵심 용어 사전 (${(sb.glossary || []).length}개 용어)</span>
+                    <span class="text-muted">기사에 등장하는 주요 개념·키워드를 독자와 AI 검색엔진이 한눈에 이해할 수 있도록 명쾌하게 정의합니다.</span>
+                  </div>
+                  <div class="flex-row" style="gap: 10px;">
+                    <button type="button" class="text-action-orange" id="docAddGlossaryBtn">+ 용어 추가</button>
+                    <button type="button" class="text-action" data-copy-part="glossary">📋 용어 사전만 복사</button>
+                  </div>
+                </div>
+
+                <div class="mb-8">
+                  <input type="text" class="doc-editable-input" id="docGlossaryTitle" value="${escapeHtml(sb.glossaryTitle || '[핵심 용어 사전]')}" style="font-size: 15px; font-weight: 800;" />
+                </div>
+
+                <div>
+                  ${(sb.glossary || []).map((gItem, gIdx) => `
+                    <div style="display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; margin-bottom: 8px; background-color: var(--bg-subtle); border: var(--border-thin); border-radius: var(--radius-general);">
+                      <input type="text" class="doc-editable-input" data-doc-glossary-term="${gIdx}" value="${escapeHtml(gItem.term || '')}" placeholder="핵심 용어명 (예: 버츄얼 아이돌)" style="width: 210px; flex-shrink: 0; font-weight: 800; font-size: 13px; background-color: var(--white);" />
+                      <textarea class="doc-editable-textarea" data-doc-glossary-desc="${gIdx}" rows="1" placeholder="용어에 대한 1~2문장 명쾌한 해설 ('~입니다' 체)" style="flex: 1; font-size: 13px; color: var(--text-secondary); background-color: var(--white);">${escapeHtml(gItem.desc || '')}</textarea>
+                      <button type="button" class="text-action" data-doc-del-glossary="${gIdx}" style="font-size: 12px; color: var(--text-muted); padding-top: 6px;">✕</button>
+                    </div>
+                  `).join('')}
                 </div>
               </section>
 
@@ -2319,16 +2438,22 @@
                 </div>
               </section>
 
-              <!-- STEP 08: 마무리 한 줄 요약 & 이미지 캡션 · 고지 문구 -->
+              <!-- STEP 08: 수미상관 마무리 총평 문단 & 한 줄 요약 · 출처 고지 -->
               <section class="editor-block-section" id="block-step-8">
                 <div class="editor-step-header">
                   <div class="flex-row" style="gap: 8px;">
-                    <span class="editor-step-badge">STEP 08 · 마무리 한 줄 요약 & 출처 고지</span>
-                    <span class="text-muted">"한 줄 요약! ~입니다." 형식으로 기사의 핵심 결론을 매듭짓습니다.</span>
+                    <span class="editor-step-badge">STEP 08 · 수미상관 마무리 총평 & 한 줄 요약</span>
+                    <span class="text-muted">도입부의 여운을 회수하는 에필로그 문단과 "한 줄 요약! ~입니다."로 기사의 핵심 결론을 매듭짓습니다.</span>
                   </div>
                 </div>
 
+                <div class="mb-12">
+                  <label class="text-muted" style="display: block; margin-bottom: 4px; font-weight: 700;">■ 수미상관 마무리 총평 문단 (에필로그)</label>
+                  <textarea class="doc-editable-textarea" id="docClosingParagraph" rows="3" style="font-size: 14px; color: var(--text-primary); line-height: 1.7;" placeholder="도입부의 화두와 연결해 기사 전체의 의미를 갈무리하는 마무리 총평 문단을 입력하세요">${escapeHtml(sb.closingParagraph || '')}</textarea>
+                </div>
+
                 <div style="border-left: 3px solid var(--mk-orange); padding-left: 12px; margin-bottom: 14px;">
+                  <label class="text-muted" style="display: block; margin-bottom: 4px; font-weight: 700;">■ 한 줄 요약!</label>
                   <textarea class="doc-editable-textarea" id="docOneLine" rows="2" style="font-size: 14.5px; font-weight: 800;">${escapeHtml(sb.oneLineSummary || '')}</textarea>
                 </div>
 
@@ -2454,7 +2579,7 @@
       const nextType = Number(e.target.value);
       w.typeId = nextType;
       showToast(`[${CONTENT_TYPES[nextType].shortName}] 흐름에 맞춰 본문 소제목·요약표·FAQ 구성을 전환합니다...`);
-      await triggerLiveNewsRefresh(true, w.keyword);
+      await triggerLiveNewsRefresh(true, w.keyword, true);
     });
 
     // 빈 문서로 비우기 (블로킹 confirm 없이 즉시 실행)
@@ -2466,6 +2591,7 @@
           title: '1. 첫 번째 소제목을 입력하세요',
           subtitle: '소제목 보조 설명을 입력하세요',
           content: '독자에게 말을 거는 질문("~하신 적 없으신가요?")으로 도입부를 시작하고, 본문은 "~합니다" 체로 작성해 주세요.',
+          imageCaption: '',
           sourceIds: []
         }
       ];
@@ -2480,9 +2606,14 @@
         headers: ['구분', '핵심 내용', '비고'],
         rows: [['항목 1', '내용을 입력하세요', '비고 입력'], ['항목 2', '내용을 입력하세요', '비고 입력']]
       };
+      w.summaryBlocks.glossaryTitle = '[핵심 용어 사전]';
+      w.summaryBlocks.glossary = [
+        { term: '핵심 용어 1', desc: '용어에 대한 1~2문장 명쾌한 해설을 입력하세요.' }
+      ];
       w.summaryBlocks.faqs = [
         { q: 'Q1. 독자들이 가장 궁금해할 질문을 입력하세요?', a: '답변을 "~합니다" 체로 입력하세요.' }
       ];
+      w.summaryBlocks.closingParagraph = '도입부의 화두와 연결해 기사 전체의 의미를 갈무리하는 마무리 총평 문단을 입력해 주세요.';
       w.summaryBlocks.oneLineSummary = '한 줄 요약! 기사 전체 핵심 메시지를 한 문장으로 정리해 주세요.';
       w.factChecks = [];
       saveCurrentWork(false);
@@ -2520,7 +2651,7 @@
       }
     });
 
-    // 영역별 개별 복사 버튼 (제목만, AI요약만, 요약표만, FAQ만 복사)
+    // 영역별 개별 복사 버튼 (제목만, AI요약만, 요약표만, 용어사전만, FAQ만 복사)
     root.querySelectorAll('[data-copy-part]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const part = btn.getAttribute('data-copy-part');
@@ -2533,6 +2664,10 @@
           const tLines = [sb.summaryTable?.title || '[요약표]', (sb.summaryTable?.headers || []).join(' | ')];
           (sb.summaryTable?.rows || []).forEach(r => tLines.push(r.join(' | ')));
           textToCopy = tLines.join('\n');
+        } else if (part === 'glossary') {
+          const gLines = [sb.glossaryTitle || '[핵심 용어 사전]'];
+          (sb.glossary || []).forEach(g => gLines.push(`${g.term} : ${g.desc}`));
+          textToCopy = gLines.join('\n');
         } else if (part === 'faq') {
           textToCopy = (sb.faqs || []).map(f => `${f.q}\nA. ${f.a}`).join('\n\n');
         }
@@ -2542,7 +2677,7 @@
     });
 
     // 왼쪽 패널: 실시간 뉴스 검색해 팩트만 추가 OR 오른쪽 기사 전체 새로 쓰기
-    async function triggerLiveNewsRefresh(rebuildDraft, customKeyword) {
+    async function triggerLiveNewsRefresh(rebuildDraft, customKeyword, keepCurrentType = false) {
       const kwEl = document.getElementById('leftSearchKwInput');
       const compEl = document.getElementById('leftSearchCompInput');
       const kw = (customKeyword || (kwEl ? kwEl.value : w.keyword)).trim();
@@ -2551,7 +2686,8 @@
         showToast('검색할 키워드를 입력해 주세요.');
         return;
       }
-      const nextTypeId = customKeyword ? detectBestContentType(kw, comp, '', w.typeId) : w.typeId;
+      const shouldAutoMatch = rebuildDraft && !keepCurrentType;
+      const nextTypeId = shouldAutoMatch ? detectBestContentType(kw, comp, '', w.typeId) : w.typeId;
       state.isRefreshingInEditor = true;
       showToast(
         rebuildDraft
@@ -2566,7 +2702,7 @@
             keyword: kw,
             company: comp,
             typeId: nextTypeId,
-            autoMatchType: Boolean(customKeyword),
+            autoMatchType: shouldAutoMatch,
             rebuildDraft,
             existingSources: w.sources || [],
             existingResearchItems: w.researchItems || []
@@ -2821,12 +2957,22 @@
       saveCurrentWork(true);
     });
 
-    // 본문 섹션 제목·내용 인라인 수정
+    // 본문 섹션 제목·내용·단락 캡션 인라인 수정
     root.querySelectorAll('[data-doc-sec-title]').forEach(inp => {
       inp.addEventListener('input', () => {
         const sec = w.draftSections.find(s => s.id === inp.getAttribute('data-doc-sec-title'));
         if (sec) {
           sec.title = inp.value;
+          saveCurrentWork(true);
+        }
+      });
+    });
+
+    root.querySelectorAll('[data-doc-sec-caption]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const sec = w.draftSections.find(s => s.id === inp.getAttribute('data-doc-sec-caption'));
+        if (sec) {
+          sec.imageCaption = inp.value;
           saveCurrentWork(true);
         }
       });
@@ -2900,6 +3046,7 @@
         id: newSecId,
         title: '독자들이 가장 궁금해할 다음 질문은 무엇일까요?',
         content: '여기에 본문 내용을 "~합니다" 체로 작성하세요.',
+        imageCaption: '',
         sourceIds: []
       });
       saveCurrentWork(false);
@@ -2941,7 +3088,7 @@
     });
 
     document.getElementById('docAddTableRowBtn')?.addEventListener('click', () => {
-      const colLen = (sb.summaryTable?.headers || []).length || 4;
+      const colLen = (sb.summaryTable?.headers || []).length || 5;
       sb.summaryTable.rows.push(Array(colLen).fill('내용 입력'));
       saveCurrentWork(false);
       render(true);
@@ -2960,6 +3107,54 @@
         sb.summaryTable.rows.splice(rIdx, 1);
         saveCurrentWork(false);
         render(true);
+      });
+    });
+
+    // 핵심 용어 사전 (Glossary) 인라인 편집
+    document.getElementById('docGlossaryTitle')?.addEventListener('input', e => {
+      sb.glossaryTitle = e.target.value;
+      saveCurrentWork(true);
+    });
+
+    document.getElementById('docAddGlossaryBtn')?.addEventListener('click', () => {
+      sb.glossary = sb.glossary || [];
+      sb.glossary.push({
+        term: '새 핵심 용어',
+        desc: '용어에 대한 1~2문장 명쾌한 해설을 "~입니다" 체로 입력하세요.'
+      });
+      saveCurrentWork(false);
+      render(true);
+    });
+
+    root.querySelectorAll('[data-doc-glossary-term]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const gIdx = Number(inp.getAttribute('data-doc-glossary-term'));
+        if (sb.glossary && sb.glossary[gIdx]) {
+          sb.glossary[gIdx].term = inp.value;
+          saveCurrentWork(true);
+        }
+      });
+    });
+
+    root.querySelectorAll('[data-doc-glossary-desc]').forEach(ta => {
+      ta.addEventListener('input', () => {
+        autoResizeTextarea(ta);
+        const gIdx = Number(ta.getAttribute('data-doc-glossary-desc'));
+        if (sb.glossary && sb.glossary[gIdx]) {
+          sb.glossary[gIdx].desc = ta.value;
+          saveCurrentWork(true);
+        }
+      });
+    });
+
+    root.querySelectorAll('[data-doc-del-glossary]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const gIdx = Number(btn.getAttribute('data-doc-del-glossary'));
+        if (sb.glossary) {
+          sb.glossary.splice(gIdx, 1);
+          saveCurrentWork(false);
+          render(true);
+        }
       });
     });
 
@@ -3029,7 +3224,12 @@
       });
     });
 
-    // 한 줄 요약, 캡션, 고지문구 인라인 수정
+    // 수미상관 마무리 총평 문단, 한 줄 요약, 캡션, 고지문구 인라인 수정
+    document.getElementById('docClosingParagraph')?.addEventListener('input', e => {
+      autoResizeTextarea(e.target);
+      sb.closingParagraph = e.target.value;
+      saveCurrentWork(true);
+    });
     document.getElementById('docOneLine')?.addEventListener('input', e => {
       autoResizeTextarea(e.target);
       sb.oneLineSummary = e.target.value;
