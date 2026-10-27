@@ -788,7 +788,8 @@ const MIME_TYPES = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
-  '.pdf': 'application/pdf'
+  '.pdf': 'application/pdf',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
 };
 
 const requestHandler = async (req, res) => {
@@ -1092,7 +1093,7 @@ const requestHandler = async (req, res) => {
         'Cache-Control': 'no-store'
       };
       if (ext === '.pdf') {
-        headers['Content-Disposition'] = 'inline; filename="nasmedia-2026-calendar.pdf"';
+        headers['Content-Disposition'] = `inline; filename="${path.basename(filePath)}"`;
       }
       res.writeHead(200, headers);
       return fs.createReadStream(filePath).pipe(res);

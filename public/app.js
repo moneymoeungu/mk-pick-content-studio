@@ -736,23 +736,90 @@
   }
 
   async function initApp() {
+    // 초기 화면 즉시 렌더링 (큐레이션 기본 트렌드 우선 표시 후 비동기 최신화)
+    state.trendRadar = {
+      googleTrends: CURATED_TREND_TOPICS.google || [],
+      portalRetailTrends: CURATED_TREND_TOPICS.portalRetail || [],
+      shortFormTrends: CURATED_TREND_TOPICS.shortForm || [],
+      newsletterTrends: CURATED_TREND_TOPICS.newsletter || []
+    };
     try {
       await loadConfig();
-      const [worksRes] = await Promise.all([
-        apiFetch('/api/works').catch(() => {
-          try {
-            const savedWorks = localStorage.getItem(CLIENT_WORKS_STORAGE_KEY);
-            if (savedWorks) return { works: JSON.parse(savedWorks) };
-          } catch (e) {}
-          return { works: getInitialWorks ? getInitialWorks() : [] };
-        }),
-        loadTrends()
-      ]);
+      const worksRes = await apiFetch('/api/works').catch(() => {
+        try {
+          const savedWorks = localStorage.getItem(CLIENT_WORKS_STORAGE_KEY);
+          if (savedWorks) return { works: JSON.parse(savedWorks) };
+        } catch (e) {}
+        return { works: getInitialWorks ? getInitialWorks() : [] };
+      });
       state.works = worksRes.works || [];
     } catch (err) {
       state.works = getInitialWorks ? getInitialWorks() : [];
     }
     render();
+    loadTrends().then(() => render(true));
+  }
+
+  function openUserGuideModal() {
+    const modalRoot = document.getElementById('modalRoot');
+    if (!modalRoot) return;
+    let activeTab = 'slides'; // 'slides' | 'pdf'
+
+    function renderGuideModalContent() {
+      modalRoot.innerHTML = `
+        <div style="position: fixed; inset: 0; background: rgba(17, 24, 39, 0.55); z-index: 320; display: flex; align-items: center; justify-content: center; padding: 18px;">
+          <div class="card" style="width: 100%; max-width: 1280px; height: 90vh; margin-bottom: 0; padding: 16px 22px; display: flex; flex-direction: column;">
+            <div class="flex-between" style="padding-bottom: 12px; border-bottom: var(--border-thin); flex-wrap: wrap; gap: 10px;">
+              <div class="flex-row" style="gap: 12px;">
+                <span style="background: var(--mk-orange); color: #FFFFFF; font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 6px;">실무 매뉴얼</span>
+                <h3 style="font-size: 17px; font-weight: 800; color: var(--text-primary);">MK Pick GEO 콘텐츠 스튜디오 — 실무자 완벽 사용 가이드</h3>
+                <div style="display: inline-flex; border: var(--border-thin); border-radius: 6px; overflow: hidden; background: var(--bg-subtle); margin-left: 8px;">
+                  <button type="button" id="guideTabSlidesBtn" style="padding: 5px 12px; font-size: 12px; font-weight: 800; border: none; cursor: pointer; background: ${activeTab === 'slides' ? 'var(--mk-orange)' : 'transparent'}; color: ${activeTab === 'slides' ? '#FFFFFF' : 'var(--text-secondary)'};">
+                    🖥️ 슬라이드(PPT) 보기
+                  </button>
+                  <button type="button" id="guideTabPdfBtn" style="padding: 5px 12px; font-size: 12px; font-weight: 800; border: none; cursor: pointer; background: ${activeTab === 'pdf' ? 'var(--mk-orange)' : 'transparent'}; color: ${activeTab === 'pdf' ? '#FFFFFF' : 'var(--text-secondary)'};">
+                    📄 PDF 원본 보기
+                  </button>
+                </div>
+              </div>
+              <div class="flex-row" style="gap: 8px;">
+                <a href="./mk-pick-user-guide.pdf" download="MK_Pick_GEO_콘텐츠_스튜디오_사용가이드.pdf" class="btn btn-sm btn-primary" style="text-decoration: none; font-weight: 800;">
+                  📥 PDF 다운로드
+                </a>
+                <a href="./mk-pick-user-guide.pptx" download="MK_Pick_GEO_콘텐츠_스튜디오_사용가이드.pptx" class="btn btn-sm" style="text-decoration: none; font-weight: 800; border-color: var(--mk-orange); color: var(--mk-orange);">
+                  📊 PPTX 다운로드
+                </a>
+                <a href="./guide.html" target="_blank" rel="noopener noreferrer" class="btn btn-sm" style="text-decoration: none; font-weight: 700;">
+                  새 탭에서 크게 열기 ↗
+                </a>
+                <button type="button" class="btn btn-sm" id="closeGuideModalBtn" style="font-weight: 800;">✕ 닫기</button>
+              </div>
+            </div>
+            <div style="flex: 1; min-height: 0; margin-top: 12px; border: var(--border-thin); border-radius: var(--radius-general); overflow: hidden; background: #F4F5F7;">
+              ${activeTab === 'slides' ? `
+                <iframe src="./guide.html" style="width: 100%; height: 100%; border: none; display: block; background: #FFFFFF;" title="MK Pick 사용 가이드 슬라이드"></iframe>
+              ` : `
+                <iframe src="./mk-pick-user-guide.pdf#view=FitH" style="width: 100%; height: 100%; border: none; display: block; background: #FFFFFF;" title="MK Pick 사용 가이드 PDF"></iframe>
+              `}
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('closeGuideModalBtn')?.addEventListener('click', () => {
+        modalRoot.innerHTML = '';
+      });
+      document.getElementById('guideTabSlidesBtn')?.addEventListener('click', () => {
+        activeTab = 'slides';
+        renderGuideModalContent();
+      });
+      document.getElementById('guideTabPdfBtn')?.addEventListener('click', () => {
+        activeTab = 'pdf';
+        renderGuideModalContent();
+      });
+    }
+
+    renderGuideModalContent();
   }
 
   async function openApiKeyModal() {
@@ -928,11 +995,17 @@
     const calls = state.apiUsageStats?.totalCalls || 0;
     const krw = state.apiUsageStats?.estimatedCostKrw || 0;
     meta.innerHTML = `
-      <button type="button" class="btn btn-sm" id="openApiKeyModalBtn" style="border-color: ${state.hasPerplexityKey ? '#8FD4B2' : 'var(--mk-orange)'}; color: ${state.hasPerplexityKey ? 'var(--status-green)' : 'var(--mk-orange)'}; background-color: ${state.hasPerplexityKey ? 'var(--status-green-bg)' : 'var(--mk-orange-light)'}; font-weight: 700;">
-        ${state.hasPerplexityKey ? `🟢 Perplexity 연결됨 · 호출 ${calls}회 (약 ${krw}원)` : '⚙ Perplexity API 키 설정 · 사용량 확인'}
-      </button>
+      <div class="flex-row" style="gap: 8px;">
+        <button type="button" class="btn btn-sm" id="openUserGuideModalBtn" style="border-color: var(--mk-orange); color: var(--mk-orange); background-color: #FFFFFF; font-weight: 800;">
+          📖 사용 가이드 (PPT·PDF)
+        </button>
+        <button type="button" class="btn btn-sm" id="openApiKeyModalBtn" style="border-color: ${state.hasPerplexityKey ? '#8FD4B2' : 'var(--mk-orange)'}; color: ${state.hasPerplexityKey ? 'var(--status-green)' : 'var(--mk-orange)'}; background-color: ${state.hasPerplexityKey ? 'var(--status-green-bg)' : 'var(--mk-orange-light)'}; font-weight: 700;">
+          ${state.hasPerplexityKey ? `🟢 Perplexity 연결됨 · 호출 ${calls}회 (약 ${krw}원)` : '⚙ Perplexity API 키 설정 · 사용량 확인'}
+        </button>
+      </div>
     `;
 
+    document.getElementById('openUserGuideModalBtn')?.addEventListener('click', openUserGuideModal);
     document.getElementById('openApiKeyModalBtn')?.addEventListener('click', openApiKeyModal);
 
     document.getElementById('topGoHomeBtn').addEventListener('click', () => {

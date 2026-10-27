@@ -13,7 +13,7 @@
   force = true
 
 [[headers]]
-  for = "/nasmedia-2026-calendar.pdf"
+  for = "/*.pdf"
   [headers.values]
     Content-Type = "application/pdf"
-    Content-Disposition = "inline; filename=\"nasmedia-2026-calendar.pdf\""
+    Content-Disposition = "inline"
