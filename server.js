@@ -164,8 +164,10 @@ const TREND_CACHE_TTL_MS = 30 * 60 * 1000; // 30분 캐시
 let cachedTrendRadar = null;
 let cachedTrendTimestamp = 0;
 
+const DEFAULT_PPLX_MODEL = 'google/gemini-4-argon';
+
 const apiUsageStats = {
-  model: 'sonar',
+  model: DEFAULT_PPLX_MODEL,
   totalCalls: 0,
   trendCalls: 0,
   draftCalls: 0,
@@ -184,6 +186,7 @@ function loadPersistedUsageStats() {
       const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
       if (db.apiUsageStats && typeof db.apiUsageStats === 'object') {
         Object.assign(apiUsageStats, db.apiUsageStats);
+        apiUsageStats.model = DEFAULT_PPLX_MODEL;
       }
     }
   } catch (e) {
@@ -203,8 +206,9 @@ function savePersistedUsageStats() {
 }
 
 function recordPerplexityUsage(usage = {}, callType = 'draft') {
-  const pTokens = Number(usage.prompt_tokens) || 950;
-  const cTokens = Number(usage.completion_tokens) || 1450;
+  const pTokens = Number(usage.input_tokens || usage.prompt_tokens) || 950;
+  const cTokens = Number(usage.output_tokens || usage.completion_tokens) || 1450;
+  apiUsageStats.model = DEFAULT_PPLX_MODEL;
   apiUsageStats.totalCalls += 1;
   if (callType === 'trend') apiUsageStats.trendCalls += 1;
   else apiUsageStats.draftCalls += 1;
@@ -213,27 +217,28 @@ function recordPerplexityUsage(usage = {}, callType = 'draft') {
   apiUsageStats.completionTokens += cTokens;
   apiUsageStats.totalTokens += pTokens + cTokens;
 
-  // Perplexity sonar 공식 요금: 요청당 $0.005 ($5 / 1K requests) + 입력 $1/1M tokens + 출력 $1/1M tokens
-  const callCostUsd = 0.005 + (pTokens / 1_000_000) * 1.0 + (cTokens / 1_000_000) * 1.0;
+  // Perplexity /v1/responses API가 반환하는 실제 과금(usage.cost.total_cost) 우선 반영, 없으면 토큰 단가 계산
+  const exactCostUsd = Number(usage?.cost?.total_cost);
+  const callCostUsd = (!Number.isNaN(exactCostUsd) && exactCostUsd > 0)
+    ? exactCostUsd
+    : (pTokens / 1_000_000) * 2.0 + (cTokens / 1_000_000) * 10.0;
   apiUsageStats.estimatedCostUsd = Number((apiUsageStats.estimatedCostUsd + callCostUsd).toFixed(5));
   apiUsageStats.estimatedCostKrw = Math.round(apiUsageStats.estimatedCostUsd * 1380);
   apiUsageStats.lastCalledAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
   savePersistedUsageStats();
 }
 
-// Perplexity API 실시간 호출 헬퍼 (search_recency_filter 적용 + 각주 번호 제거 + 토큰/비용 기록)
+// Perplexity Responses API (/v1/responses, model: "google/gemini-4-argon") 호출 헬퍼
 async function callPerplexityJson(apiKey, systemPrompt, userPrompt, recencyFilter = 'month', callType = 'draft') {
+  const maxOutTokens = callType === 'trend' ? 3200 : 4096;
   const payload = {
-    model: 'sonar',
-    temperature: 0.2,
-    search_recency_filter: recencyFilter,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ]
+    model: DEFAULT_PPLX_MODEL,
+    instructions: systemPrompt,
+    input: userPrompt,
+    max_output_tokens: maxOutTokens
   };
 
-  const res = await fetch('https://api.perplexity.ai/chat/completions', {
+  const res = await fetch('https://api.perplexity.ai/v1/responses', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey.trim()}`,
@@ -244,17 +249,34 @@ async function callPerplexityJson(apiKey, systemPrompt, userPrompt, recencyFilte
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
-    throw new Error(`Perplexity API 호출 실패 (${res.status}): ${errText.slice(0, 120)}`);
+    throw new Error(`Perplexity API(${DEFAULT_PPLX_MODEL}) 호출 실패 (${res.status}): ${errText.slice(0, 120)}`);
   }
 
   const data = await res.json();
   recordPerplexityUsage(data?.usage, callType);
-  const content = data?.choices?.[0]?.message?.content || '';
+
+  let content = '';
+  if (typeof data?.output_text === 'string' && data.output_text.trim()) {
+    content = data.output_text;
+  } else if (Array.isArray(data?.output)) {
+    for (const item of data.output) {
+      if (Array.isArray(item?.content)) {
+        for (const block of item.content) {
+          if (typeof block?.text === 'string') {
+            content += block.text;
+          }
+        }
+      }
+    }
+  } else {
+    content = data?.choices?.[0]?.message?.content || '';
+  }
+
   const citations = Array.isArray(data?.citations) ? data.citations : [];
 
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    throw new Error('Perplexity 응답에서 JSON 구조를 추출하지 못했습니다.');
+    throw new Error('Perplexity(google/gemini-4-argon) 응답에서 JSON 구조를 추출하지 못했습니다.');
   }
   const parsed = stripCitationBrackets(JSON.parse(jsonMatch[0]));
   return { parsed, citations };

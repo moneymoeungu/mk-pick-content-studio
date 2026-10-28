@@ -2,7 +2,7 @@
   "settings": {
     "allowedDomain": "",
     "perplexityApiKey": "",
-    "perplexityModel": "sonar",
+    "perplexityModel": "google/gemini-4-argon",
     "apiCallCount": 5
   },
   "users": [

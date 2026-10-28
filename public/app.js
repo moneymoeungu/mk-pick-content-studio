@@ -142,9 +142,11 @@
     return k.slice(0, 5) + '••••' + k.slice(-4);
   }
 
+  const DEFAULT_PPLX_MODEL = 'google/gemini-4-argon';
+
   function getClientUsageStats() {
     const defaultStats = {
-      model: 'sonar',
+      model: DEFAULT_PPLX_MODEL,
       totalCalls: 0,
       trendCalls: 0,
       draftCalls: 0,
@@ -159,13 +161,14 @@
     try {
       const raw = localStorage.getItem(CLIENT_USAGE_KEY);
       if (!raw) return defaultStats;
-      return { ...defaultStats, ...JSON.parse(raw) };
+      return { ...defaultStats, ...JSON.parse(raw), model: DEFAULT_PPLX_MODEL };
     } catch (e) {
       return defaultStats;
     }
   }
 
   function saveClientUsageStats(stats) {
+    stats.model = DEFAULT_PPLX_MODEL;
     try {
       localStorage.setItem(CLIENT_USAGE_KEY, JSON.stringify(stats));
     } catch (e) {
@@ -176,15 +179,19 @@
 
   function recordClientPerplexityUsage(usage = {}, callType = 'draft') {
     const stats = getClientUsageStats();
-    const pTokens = Number(usage.prompt_tokens) || 950;
-    const cTokens = Number(usage.completion_tokens) || 1450;
+    const pTokens = Number(usage.input_tokens || usage.prompt_tokens) || 950;
+    const cTokens = Number(usage.output_tokens || usage.completion_tokens) || 1450;
+    stats.model = DEFAULT_PPLX_MODEL;
     stats.totalCalls += 1;
     if (callType === 'trend') stats.trendCalls += 1;
     else stats.draftCalls += 1;
     stats.promptTokens += pTokens;
     stats.completionTokens += cTokens;
     stats.totalTokens += pTokens + cTokens;
-    const callCostUsd = 0.005 + (pTokens / 1_000_000) * 1.0 + (cTokens / 1_000_000) * 1.0;
+    const exactCostUsd = Number(usage?.cost?.total_cost);
+    const callCostUsd = (!Number.isNaN(exactCostUsd) && exactCostUsd > 0)
+      ? exactCostUsd
+      : (pTokens / 1_000_000) * 2.0 + (cTokens / 1_000_000) * 10.0;
     stats.estimatedCostUsd = Number((stats.estimatedCostUsd + callCostUsd).toFixed(5));
     stats.estimatedCostKrw = Math.round(stats.estimatedCostUsd * 1380);
     stats.lastCalledAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -209,35 +216,50 @@
   }
 
   async function callPerplexityDirectFromBrowser(apiKey, systemPrompt, userPrompt, recencyFilter = 'month', callType = 'draft') {
-    const res = await fetch('https://api.perplexity.ai/chat/completions', {
+    const maxOutTokens = callType === 'trend' ? 3200 : 4096;
+    const res = await fetch('https://api.perplexity.ai/v1/responses', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey.trim()}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'sonar',
-        temperature: 0.2,
-        search_recency_filter: recencyFilter,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ]
+        model: DEFAULT_PPLX_MODEL,
+        instructions: systemPrompt,
+        input: userPrompt,
+        max_output_tokens: maxOutTokens
       })
     });
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      throw new Error(`Perplexity API 호출 실패 (${res.status}): ${errText.slice(0, 100)}`);
+      throw new Error(`Perplexity API(${DEFAULT_PPLX_MODEL}) 호출 실패 (${res.status}): ${errText.slice(0, 100)}`);
     }
 
     const data = await res.json();
     recordClientPerplexityUsage(data?.usage, callType);
-    const content = data?.choices?.[0]?.message?.content || '';
+
+    let content = '';
+    if (typeof data?.output_text === 'string' && data.output_text.trim()) {
+      content = data.output_text;
+    } else if (Array.isArray(data?.output)) {
+      for (const item of data.output) {
+        if (Array.isArray(item?.content)) {
+          for (const block of item.content) {
+            if (typeof block?.text === 'string') {
+              content += block.text;
+            }
+          }
+        }
+      }
+    } else {
+      content = data?.choices?.[0]?.message?.content || '';
+    }
+
     const citations = Array.isArray(data?.citations) ? data.citations : [];
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      throw new Error('Perplexity 응답에서 JSON을 추출하지 못했습니다.');
+      throw new Error('Perplexity(google/gemini-4-argon) 응답에서 JSON을 추출하지 못했습니다.');
     }
     const parsed = stripCitationBracketsClient(JSON.parse(jsonMatch[0]));
     return { parsed, citations };
@@ -929,7 +951,7 @@
     const modalRoot = document.getElementById('modalRoot');
     if (!modalRoot) return;
     const stats = state.apiUsageStats || {
-      model: 'sonar',
+      model: DEFAULT_PPLX_MODEL,
       totalCalls: 0,
       trendCalls: 0,
       draftCalls: 0,
@@ -948,14 +970,14 @@
             <button type="button" class="text-action" id="closeApiModalBtn" style="font-size: 16px;">✕</button>
           </div>
           <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.55;">
-            현재 가장 경제적인 온라인 검색 모델인 <strong><code>sonar</code></strong> 모델을 사용하며, <strong>30분 스마트 캐시</strong>가 적용되어 단순 웹 접속이나 브라우저 새로고침(<code>F5</code>) 시에는 API가 중복 호출되지 않습니다(0원).
+            현재 Perplexity Responses API의 <strong><code>google/gemini-4-argon</code> (제미나이 아르곤)</strong> 엔진을 사용하며, <strong>30분 스마트 캐시</strong>가 적용되어 단순 웹 접속이나 브라우저 새로고침(<code>F5</code>) 시에는 API가 중복 호출되지 않습니다(0원).
           </p>
 
           <!-- 실시간 API 사용량 & 예상 비용 대시보드 -->
           <div style="padding: 12px 14px; background-color: var(--bg-subtle); border: var(--border-thin); border-radius: var(--radius-general); margin-bottom: 14px;">
             <div class="flex-between mb-6">
-              <strong style="font-size: 12.5px; color: var(--text-primary);">📊 현재 세션 API 호출 및 예상 버닝 현황</strong>
-              <span style="font-size: 11.5px; color: var(--mk-orange); font-weight: 700;">1회 호출당 약 $0.008 (약 11원)</span>
+              <strong style="font-size: 12.5px; color: var(--text-primary);">📊 누적 API 호출 및 실제 과금(버닝) 현황</strong>
+              <span style="font-size: 11.5px; color: var(--mk-orange); font-weight: 700;">엔진: google/gemini-4-argon</span>
             </div>
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center;">
               <div style="padding: 8px; background: var(--white); border: var(--border-thin); border-radius: 6px;">
@@ -1102,7 +1124,7 @@
           📖 사용 가이드 (PPT·PDF)
         </button>
         <button type="button" class="btn btn-sm" id="openApiKeyModalBtn" style="border-color: ${state.hasPerplexityKey ? '#8FD4B2' : 'var(--mk-orange)'}; color: ${state.hasPerplexityKey ? 'var(--status-green)' : 'var(--mk-orange)'}; background-color: ${state.hasPerplexityKey ? 'var(--status-green-bg)' : 'var(--mk-orange-light)'}; font-weight: 700;">
-          ${state.hasPerplexityKey ? `🟢 Perplexity 연결됨 · 호출 ${calls}회 (약 ${krw}원)` : '⚙ Perplexity API 키 설정 · 사용량 확인'}
+          ${state.hasPerplexityKey ? `🟢 Gemini-4-Argon 연결됨 · 호출 ${calls}회 (약 ${krw}원)` : '⚙ Perplexity API 키 설정 · 사용량 확인'}
         </button>
       </div>
     `;
