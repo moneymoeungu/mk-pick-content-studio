@@ -106,7 +106,7 @@
   const CLIENT_STORAGE_KEY = 'mk_pplx_api_key_v1';
   const CLIENT_DISCONNECTED_FLAG = 'mk_pplx_disconnected_v1';
   const CLIENT_USAGE_KEY = 'mk_pplx_usage_stats_v1';
-  const CLIENT_TREND_CACHE_KEY = 'mk_pplx_trend_cache_v2';
+  const CLIENT_TREND_CACHE_KEY = 'mk_pplx_trend_cache_v3';
   const CLIENT_WORKS_STORAGE_KEY = 'mk_pplx_saved_works_v1';
   const CLIENT_UI_STATE_KEY = 'mk_pplx_ui_state_v1';
   const CLIENT_TREND_TTL_MS = 30 * 60 * 1000; // 30분 캐시
@@ -782,12 +782,18 @@
         saveClientUsageStats(mergedStats);
       }
       state.trendRadar = {
-        googleTrends: (radar.googleTrends && radar.googleTrends.length > 0) ? radar.googleTrends : (CURATED_TREND_TOPICS.google || []),
-        portalRetailTrends: (radar.portalRetailTrends && radar.portalRetailTrends.length > 0) ? radar.portalRetailTrends : (CURATED_TREND_TOPICS.portalRetail || []),
-        shortFormTrends: (radar.shortFormTrends && radar.shortFormTrends.length > 0) ? radar.shortFormTrends : (CURATED_TREND_TOPICS.shortForm || []),
-        newsletterTrends: (radar.newsletterTrends && radar.newsletterTrends.length > 0) ? radar.newsletterTrends : (CURATED_TREND_TOPICS.newsletter || []),
-        brandPromoTrends: (radar.brandPromoTrends && radar.brandPromoTrends.length > 0) ? radar.brandPromoTrends : (CURATED_TREND_TOPICS.brandPromo || [])
+        googleTrends: Array.isArray(radar.googleTrends) ? radar.googleTrends : [],
+        portalRetailTrends: Array.isArray(radar.portalRetailTrends) ? radar.portalRetailTrends : [],
+        shortFormTrends: Array.isArray(radar.shortFormTrends) ? radar.shortFormTrends : [],
+        newsletterTrends: Array.isArray(radar.newsletterTrends) ? radar.newsletterTrends : [],
+        brandPromoTrends: Array.isArray(radar.brandPromoTrends) ? radar.brandPromoTrends : []
       };
+      try {
+        localStorage.setItem(CLIENT_TREND_CACHE_KEY, JSON.stringify({
+          timestamp: Date.now(),
+          data: state.trendRadar
+        }));
+      } catch (e) {}
     } catch (e) {
       // 정적 배포(GitHub Pages 등) 환경: 브라우저에서 Perplexity API 직접 호출 (30분 스마트 캐시 적용)
       const clientKey = getClientPerplexityKey();
@@ -875,14 +881,22 @@
   }
 
   async function initApp() {
-    // 초기 화면 즉시 렌더링 (큐레이션 기본 트렌드 우선 표시 후 비동기 최신화)
-    state.trendRadar = {
-      googleTrends: CURATED_TREND_TOPICS.google || [],
-      portalRetailTrends: CURATED_TREND_TOPICS.portalRetail || [],
-      shortFormTrends: CURATED_TREND_TOPICS.shortForm || [],
-      newsletterTrends: CURATED_TREND_TOPICS.newsletter || [],
-      brandPromoTrends: CURATED_TREND_TOPICS.brandPromo || []
-    };
+    // 이전에 수집되어 브라우저에 캐시된 실제 트렌드가 있으면 먼저 복원 (인위적 고정 샘플 사용 안 함)
+    try {
+      const cachedRaw = localStorage.getItem(CLIENT_TREND_CACHE_KEY);
+      if (cachedRaw) {
+        const cachedObj = JSON.parse(cachedRaw);
+        if (cachedObj && cachedObj.data) {
+          state.trendRadar = {
+            googleTrends: cachedObj.data.googleTrends || [],
+            portalRetailTrends: cachedObj.data.portalRetailTrends || [],
+            shortFormTrends: cachedObj.data.shortFormTrends || [],
+            newsletterTrends: cachedObj.data.newsletterTrends || [],
+            brandPromoTrends: cachedObj.data.brandPromoTrends || []
+          };
+        }
+      }
+    } catch (e) {}
     try {
       await loadConfig();
       const worksRes = await apiFetch('/api/works').catch(() => ({ works: [] }));
@@ -1444,7 +1458,7 @@
         <div class="home-main-tab-bar">
           <div class="home-main-tabs">
             <button type="button" class="home-main-tab-btn ${state.homeDiscoveryTab === 'trends' ? 'active' : ''}" data-home-main-tab="trends">
-              🔥 실시간 트렌드 추천 (10선)
+              🔥 실시간 트렌드 추천
             </button>
             <button type="button" class="home-main-tab-btn ${state.homeDiscoveryTab === 'calendar' ? 'active' : ''}" data-home-main-tab="calendar">
               📅 2026 월별 마케팅 캘린더
@@ -1513,22 +1527,31 @@
             </div>
 
             <div class="trend-clean-grid">
-              ${activeTrendList.map((item, idx) => {
+              ${activeTrendList.length === 0 ? `
+                <div style="grid-column: 1 / -1; padding: 28px 16px; text-align: center; color: var(--text-secondary); font-size: 13px; background-color: var(--bg-subtle); border-radius: var(--radius-general);">
+                  ${state.isLoadingTrends
+                    ? '⏳ 실시간 뉴스·쇼츠·구글 트렌드 원본 데이터를 수집하고 있습니다. 잠시만 기다려주세요...'
+                    : '표시할 실시간 트렌드 항목이 없습니다. 우측 상단 [↻ 실시간 트렌드 새로고침]을 눌러 최신 데이터를 불러오세요.'}
+                </div>
+              ` : activeTrendList.map((item, idx) => {
                 const matchedTypeId = detectBestContentType(item.keyword, item.company || '', item.desc || '', state.trendTab === 'shortform' || state.trendTab === 'newsletter' ? 3 : 4);
                 const matchedCat = recommendMkPickCategory(item.keyword, matchedTypeId, item.company || '').recommendedCategory;
                 const articleUrl = item.url || `https://news.google.com/search?q=${encodeURIComponent(item.keyword)}&hl=ko&gl=KR&ceid=KR:ko`;
-                const sectorBadge = item.sector || (state.trendTab === 'brandpromo' ? item.badge : '');
+                const isYoutubeShorts = articleUrl.includes('youtube.com/shorts') || item.source === '유튜브 쇼츠';
+                const cleanSource = String(item.source || '').trim();
+                const shortSource = cleanSource.length > 9 ? cleanSource.slice(0, 9) + '…' : cleanSource;
+                const linkLabel = isYoutubeShorts
+                  ? '쇼츠 영상 ↗'
+                  : shortSource
+                    ? `${shortSource} 원문 ↗`
+                    : '원문 기사 ↗';
+                const linkTooltip = [cleanSource, item.pubDateShort, '실제 원문 새 창 열기'].filter(Boolean).join(' · ');
                 return `
                   <div class="trend-clean-row" data-use-trend-kw="${escapeHtml(item.keyword)}" data-use-trend-comp="${escapeHtml(item.company || '')}" data-use-trend-type="${matchedTypeId}">
                     <div style="min-width: 0; flex: 1;">
                       <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 2px;">
                         <span style="font-size: 12px; font-weight: 800; color: var(--mk-orange); width: 18px;">${idx + 1}</span>
                         <strong style="font-size: 14px; color: var(--text-primary);">${escapeHtml(item.keyword)}</strong>
-                        ${sectorBadge ? `
-                          <span style="font-size: 10.5px; font-weight: 700; color: var(--text-secondary); background-color: var(--bg-subtle); border: var(--border-thin); padding: 1px 6px; border-radius: 4px;">
-                            ${escapeHtml(sectorBadge)}
-                          </span>
-                        ` : ''}
                         <span style="font-size: 11px; font-weight: 700; color: var(--mk-orange); background-color: var(--mk-orange-light); padding: 1px 6px; border-radius: 4px;">
                           유형 0${matchedTypeId} · ${escapeHtml(matchedCat)}
                         </span>
@@ -1544,9 +1567,9 @@
                         rel="noopener noreferrer"
                         data-trend-ext-link="1"
                         style="font-size: 11.5px; font-weight: 700; color: var(--text-secondary); background-color: var(--bg-subtle); border: var(--border-thin); padding: 3px 8px; border-radius: 4px; text-decoration: none; white-space: nowrap;"
-                        title="관련 실시간 보도 원문을 새 창에서 확인합니다"
+                        title="${escapeHtml(linkTooltip)}"
                       >
-                        원문 기사 ↗
+                        ${escapeHtml(linkLabel)}
                       </a>
                       <span style="font-size: 12px; font-weight: 800; color: var(--mk-orange); white-space: nowrap;">
                         초안 생성 →
