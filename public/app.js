@@ -53,6 +53,7 @@
   function escapeHtml(str) {
     if (str === null || str === undefined) return '';
     return String(str)
+      .replace(/\\n/g, '\n')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -377,12 +378,14 @@
         }))
       : baseScenario.researchItems;
 
+    const normalizeNewlines = str => String(str || '').replace(/\\n/g, '\n');
+
     const draftSections = Array.isArray(parsed.draftSections) && parsed.draftSections.length > 0
       ? parsed.draftSections.map((sec, i) => ({
           id: `sec-${i + 1}`,
-          title: String(sec.title || `핵심 단락 ${i + 1}`).replace(/^\d+[\.\)]\s*/, ''),
-          content: sec.content || '',
-          imageCaption: sec.imageCaption || '',
+          title: normalizeNewlines(sec.title || `핵심 단락 ${i + 1}`).replace(/^\d+[\.\)]\s*/, '').trim(),
+          content: normalizeNewlines(sec.content || '').trim(),
+          imageCaption: normalizeNewlines(sec.imageCaption || '').trim(),
           sourceIds: [mergedSources[0]?.id, mergedSources[1]?.id].filter(Boolean)
         }))
       : baseScenario.draftSections;
@@ -392,24 +395,34 @@
     const summaryBlocks = {
       ...baseScenario.summaryBlocks,
       mkCategory: chosenCat,
-      mkCategoryReason: parsed.mkCategoryReason || baseScenario.summaryBlocks.mkCategoryReason,
+      mkCategoryReason: normalizeNewlines(parsed.mkCategoryReason || baseScenario.summaryBlocks.mkCategoryReason).trim(),
       byline: `${chosenCat} | 남궁선희 기자 | 입력 ${new Date().toISOString().slice(0, 10).replace(/-/g, '.')} 10:00`,
-      subtitle: parsed.subtitle || baseScenario.summaryBlocks.subtitle,
+      subtitle: normalizeNewlines(parsed.subtitle || baseScenario.summaryBlocks.subtitle).trim(),
       aiFactSummary: Array.isArray(parsed.aiFactSummary) && parsed.aiFactSummary.length > 0
-        ? parsed.aiFactSummary
+        ? parsed.aiFactSummary.map(s => normalizeNewlines(s).trim())
         : baseScenario.summaryBlocks.aiFactSummary,
       summaryTable: parsed.summaryTable && Array.isArray(parsed.summaryTable.rows)
-        ? parsed.summaryTable
+        ? {
+            title: normalizeNewlines(parsed.summaryTable.title || '[요약표]').trim(),
+            headers: (parsed.summaryTable.headers || []).map(h => normalizeNewlines(h).trim()),
+            rows: (parsed.summaryTable.rows || []).map(r => Array.isArray(r) ? r.map(c => normalizeNewlines(c).trim()) : [])
+          }
         : baseScenario.summaryBlocks.summaryTable,
-      glossaryTitle: parsed.glossaryTitle || baseScenario.summaryBlocks.glossaryTitle || '주제를 더 깊이 이해하는 용어 사전',
+      glossaryTitle: normalizeNewlines(parsed.glossaryTitle || baseScenario.summaryBlocks.glossaryTitle || '주제를 더 깊이 이해하는 용어 사전').trim(),
       glossary: Array.isArray(parsed.glossary) && parsed.glossary.length > 0
-        ? parsed.glossary
+        ? parsed.glossary.map(g => ({
+            term: normalizeNewlines(g.term || '').trim(),
+            desc: normalizeNewlines(g.desc || '').trim()
+          }))
         : (baseScenario.summaryBlocks.glossary || []),
       faqs: Array.isArray(parsed.faqs) && parsed.faqs.length > 0
-        ? parsed.faqs
+        ? parsed.faqs.map(f => ({
+            q: normalizeNewlines(f.q || '').trim(),
+            a: normalizeNewlines(f.a || '').trim()
+          }))
         : baseScenario.summaryBlocks.faqs,
-      closingParagraph: parsed.closingParagraph || baseScenario.summaryBlocks.closingParagraph || '',
-      oneLineSummary: parsed.oneLineSummary || baseScenario.summaryBlocks.oneLineSummary
+      closingParagraph: normalizeNewlines(parsed.closingParagraph || baseScenario.summaryBlocks.closingParagraph || '').trim(),
+      oneLineSummary: normalizeNewlines(parsed.oneLineSummary || baseScenario.summaryBlocks.oneLineSummary).trim()
     };
 
     return {
@@ -469,19 +482,19 @@
 
     if (sb.aiFactSummary && sb.aiFactSummary.length > 0) {
       lines.push('[AI 팩트 체크 요약]');
-      sb.aiFactSummary.forEach(item => lines.push(item));
+      sb.aiFactSummary.forEach(item => lines.push(String(item || '').replace(/\\n/g, '\n')));
       lines.push('');
     }
 
     if (sb.subtitle) {
-      lines.push(sb.subtitle);
+      lines.push(String(sb.subtitle || '').replace(/\\n/g, '\n'));
       lines.push('');
     }
 
     (w.draftSections || []).forEach(sec => {
-      if (sec.title) lines.push(`■ ${sec.title}`);
-      if (sec.content) lines.push(sec.content);
-      if (sec.imageCaption) lines.push(sec.imageCaption);
+      if (sec.title) lines.push(`■ ${String(sec.title).replace(/\\n/g, '\n')}`);
+      if (sec.content) lines.push(String(sec.content).replace(/\\n/g, '\n'));
+      if (sec.imageCaption) lines.push(String(sec.imageCaption).replace(/\\n/g, '\n'));
       lines.push('');
     });
 

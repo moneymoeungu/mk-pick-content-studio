@@ -436,13 +436,15 @@ ${newsContext || '실시간 웹 검색 결과를 바탕으로 최신 팩트 반�
       }))
     : baseScenario.researchItems;
 
+  const normalizeNewlines = str => String(str || '').replace(/\\n/g, '\n');
+
   const draftSections = Array.isArray(parsed.draftSections) && parsed.draftSections.length > 0
     ? parsed.draftSections.map((sec, i) => ({
         id: sec.id || `sec-${i + 1}`,
-        title: sec.title || `단락 ${i + 1}`,
-        subtitle: sec.subtitle || '',
-        content: sec.content || '',
-        imageCaption: sec.imageCaption || '',
+        title: normalizeNewlines(sec.title || `단락 ${i + 1}`).trim(),
+        subtitle: normalizeNewlines(sec.subtitle || '').trim(),
+        content: normalizeNewlines(sec.content || '').trim(),
+        imageCaption: normalizeNewlines(sec.imageCaption || '').trim(),
         sourceIds: mergedSources.slice(0, 2).map(s => s.id)
       }))
     : baseScenario.draftSections;
@@ -458,36 +460,40 @@ ${newsContext || '실시간 웹 검색 결과를 바탕으로 최신 팩트 반�
     mkCategory: pickedCategory,
     mkCategoryReason: pickedCatReason,
     byline: `${pickedCategory} | 남궁선희 기자 | 입력 ${new Date().toISOString().slice(0, 10).replace(/-/g, '.')} 10:00`,
-    subtitle: parsed.subtitle || baseScenario.summaryBlocks.subtitle,
+    subtitle: normalizeNewlines(parsed.subtitle || baseScenario.summaryBlocks.subtitle).trim(),
     aiFactSummary: Array.isArray(parsed.aiFactSummary) && parsed.aiFactSummary.length > 0
-      ? parsed.aiFactSummary
+      ? parsed.aiFactSummary.map(s => normalizeNewlines(s).trim())
       : baseScenario.summaryBlocks.aiFactSummary,
     summaryTable: parsed.summaryTable && Array.isArray(parsed.summaryTable.headers)
-      ? parsed.summaryTable
+      ? {
+          title: normalizeNewlines(parsed.summaryTable.title || '[요약표]').trim(),
+          headers: parsed.summaryTable.headers.map(h => normalizeNewlines(h).trim()),
+          rows: (parsed.summaryTable.rows || []).map(r => Array.isArray(r) ? r.map(c => normalizeNewlines(c).trim()) : [])
+        }
       : baseScenario.summaryBlocks.summaryTable,
-    glossaryTitle: parsed.glossaryTitle || baseScenario.summaryBlocks.glossaryTitle || '주제를 더 깊이 이해하는 용어 사전',
+    glossaryTitle: normalizeNewlines(parsed.glossaryTitle || baseScenario.summaryBlocks.glossaryTitle || '주제를 더 깊이 이해하는 용어 사전').trim(),
     glossary: Array.isArray(parsed.glossary) && parsed.glossary.length > 0
       ? parsed.glossary.map(g => ({
-          term: (g.term || '').trim(),
-          desc: (g.desc || '').trim()
+          term: normalizeNewlines(g.term || '').trim(),
+          desc: normalizeNewlines(g.desc || '').trim()
         })).filter(g => g.term && g.desc)
       : (baseScenario.summaryBlocks.glossary || []),
     faqs: Array.isArray(parsed.faqs) && parsed.faqs.length > 0
       ? parsed.faqs.map((f, i) => ({
-          q: /^Q\d+\./i.test((f.q || '').trim()) ? f.q.trim() : `Q${i + 1}. ${(f.q || '').trim()}`,
-          a: (f.a || '').trim()
+          q: /^Q\d+\./i.test((f.q || '').trim()) ? normalizeNewlines(f.q).trim() : `Q${i + 1}. ${normalizeNewlines(f.q || '').trim()}`,
+          a: normalizeNewlines(f.a || '').trim()
         }))
       : baseScenario.summaryBlocks.faqs,
     fanoutQuestions: Array.isArray(parsed.fanoutQuestions) && parsed.fanoutQuestions.length > 0
       ? parsed.fanoutQuestions.map((fq, i) => ({
           id: `fq-pplx-${i + 1}`,
           category: fq.category || '연관 질문',
-          q: (fq.q || '').replace(/^Q\d+\.\s*/i, '').trim(),
-          a: (fq.a || '').trim()
+          q: normalizeNewlines(fq.q || '').replace(/^Q\d+\.\s*/i, '').trim(),
+          a: normalizeNewlines(fq.a || '').trim()
         }))
       : baseScenario.summaryBlocks.fanoutQuestions,
-    closingParagraph: parsed.closingParagraph || baseScenario.summaryBlocks.closingParagraph || '',
-    oneLineSummary: parsed.oneLineSummary || baseScenario.summaryBlocks.oneLineSummary
+    closingParagraph: normalizeNewlines(parsed.closingParagraph || baseScenario.summaryBlocks.closingParagraph || '').trim(),
+    oneLineSummary: normalizeNewlines(parsed.oneLineSummary || baseScenario.summaryBlocks.oneLineSummary).trim()
   };
 
   const titleCandidates = Array.isArray(parsed.titleCandidates) && parsed.titleCandidates.length > 0
