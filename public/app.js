@@ -106,6 +106,7 @@
   const CLIENT_USAGE_KEY = 'mk_pplx_usage_stats_v1';
   const CLIENT_TREND_CACHE_KEY = 'mk_pplx_trend_cache_v2';
   const CLIENT_WORKS_STORAGE_KEY = 'mk_pplx_saved_works_v1';
+  const CLIENT_UI_STATE_KEY = 'mk_pplx_ui_state_v1';
   const CLIENT_TREND_TTL_MS = 30 * 60 * 1000; // 30분 캐시
 
   // 정적 호스팅 폴백용 기본값 (Netlify에서는 서버리스 환경 변수 PERPLEXITY_API_KEY가 /api/* 를 통해 자동 연동됨)
@@ -716,7 +717,11 @@
       const url = forceRefresh ? '/api/trends?refresh=1' : '/api/trends';
       const radar = await apiFetch(url);
       if (radar.apiUsageStats) {
-        state.apiUsageStats = radar.apiUsageStats;
+        const localStats = getClientUsageStats();
+        const mergedStats = (radar.apiUsageStats.totalCalls >= (localStats.totalCalls || 0))
+          ? radar.apiUsageStats
+          : localStats;
+        saveClientUsageStats(mergedStats);
       }
       state.trendRadar = {
         googleTrends: radar.googleTrends || CURATED_TREND_TOPICS.google || [],
@@ -787,7 +792,11 @@
       state.hasPerplexityKey = Boolean(cfg.hasPerplexityKey);
       state.maskedKey = cfg.maskedKey || '';
       if (cfg.apiUsageStats) {
-        state.apiUsageStats = cfg.apiUsageStats;
+        const localStats = getClientUsageStats();
+        const mergedStats = (cfg.apiUsageStats.totalCalls >= (localStats.totalCalls || 0))
+          ? cfg.apiUsageStats
+          : localStats;
+        saveClientUsageStats(mergedStats);
       }
     } catch (e) {
       // GitHub Pages 등 정적 호스팅 환경: 클라이언트 기본 팀 키 또는 브라우저 저장 키 자동 활성화
@@ -805,18 +814,47 @@
       googleTrends: CURATED_TREND_TOPICS.google || [],
       portalRetailTrends: CURATED_TREND_TOPICS.portalRetail || [],
       shortFormTrends: CURATED_TREND_TOPICS.shortForm || [],
-      newsletterTrends: CURATED_TREND_TOPICS.newsletter || []
+      newsletterTrends: CURATED_TREND_TOPICS.newsletter || [],
+      brandPromoTrends: CURATED_TREND_TOPICS.brandPromo || []
     };
     try {
       await loadConfig();
-      const worksRes = await apiFetch('/api/works').catch(() => {
-        try {
-          const savedWorks = localStorage.getItem(CLIENT_WORKS_STORAGE_KEY);
-          if (savedWorks) return { works: JSON.parse(savedWorks) };
-        } catch (e) {}
-        return { works: getInitialWorks ? getInitialWorks() : [] };
+      const worksRes = await apiFetch('/api/works').catch(() => ({ works: [] }));
+      const serverWorks = Array.isArray(worksRes.works) ? worksRes.works : [];
+      let localWorks = [];
+      try {
+        const savedWorks = localStorage.getItem(CLIENT_WORKS_STORAGE_KEY);
+        if (savedWorks) localWorks = JSON.parse(savedWorks);
+      } catch (e) {}
+
+      // 서버 DB 작업과 브라우저 로컬 저장소 작업을 병합하여 새로고침·서버 재시작 시에도 이전 기록 완벽 보존
+      const mergedMap = new Map();
+      [...localWorks, ...serverWorks].forEach(w => {
+        if (w && w.id && !mergedMap.has(w.id)) {
+          mergedMap.set(w.id, w);
+        }
       });
-      state.works = worksRes.works || [];
+      state.works = mergedMap.size > 0 ? Array.from(mergedMap.values()) : (getInitialWorks ? getInitialWorks() : []);
+      try {
+        localStorage.setItem(CLIENT_WORKS_STORAGE_KEY, JSON.stringify(state.works.slice(0, 30)));
+      } catch (e) {}
+
+      // 새로고침(F5) 직전에 보고 있던 화면(편집 중이던 기사 등) 복원
+      try {
+        const uiRaw = localStorage.getItem(CLIENT_UI_STATE_KEY);
+        if (uiRaw) {
+          const uiState = JSON.parse(uiRaw);
+          if (uiState.currentWorkId) {
+            const foundWork = state.works.find(w => w.id === uiState.currentWorkId);
+            if (foundWork) {
+              state.currentWork = foundWork;
+              if (uiState.screen === 'editor') state.screen = 'editor';
+            }
+          }
+          if (uiState.homeDiscoveryTab) state.homeDiscoveryTab = uiState.homeDiscoveryTab;
+          if (uiState.trendTab) state.trendTab = uiState.trendTab;
+        }
+      } catch (e) {}
     } catch (err) {
       state.works = getInitialWorks ? getInitialWorks() : [];
     }
@@ -1093,6 +1131,14 @@
     const prevLeftScroll = preserveScroll && leftPanel ? leftPanel.scrollTop : 0;
 
     renderTopbar();
+    try {
+      localStorage.setItem(CLIENT_UI_STATE_KEY, JSON.stringify({
+        screen: state.screen,
+        currentWorkId: state.currentWork?.id || null,
+        homeDiscoveryTab: state.homeDiscoveryTab,
+        trendTab: state.trendTab
+      }));
+    } catch (e) {}
     const root = document.getElementById('appRoot');
     if (!root) return;
 
@@ -1134,6 +1180,9 @@
       state.isSearchingNews = false;
       state.currentWork = res.work;
       state.works.unshift(res.work);
+      try {
+        localStorage.setItem(CLIENT_WORKS_STORAGE_KEY, JSON.stringify(state.works.slice(0, 30)));
+      } catch (e) {}
       state.screen = 'editor';
       const finalTypeName = CONTENT_TYPES[res.work.typeId]?.shortName || tName;
       const finalCat = res.work.summaryBlocks?.mkCategory || '산업 Q&A';
@@ -1719,9 +1768,12 @@
     root.querySelectorAll('[data-del-work]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const id = btn.getAttribute('data-del-work');
-        await apiFetch(`/api/works/${id}`, { method: 'DELETE' });
+        await apiFetch(`/api/works/${id}`, { method: 'DELETE' }).catch(() => {});
         state.works = state.works.filter(w => w.id !== id);
         if (state.currentWork?.id === id) state.currentWork = null;
+        try {
+          localStorage.setItem(CLIENT_WORKS_STORAGE_KEY, JSON.stringify(state.works.slice(0, 30)));
+        } catch (e) {}
         showToast('선택한 기사가 삭제되었습니다.');
         render(true);
       });
