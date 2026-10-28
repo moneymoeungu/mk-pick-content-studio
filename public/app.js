@@ -28,13 +28,15 @@
     showExternalCalendarEmbed: false,
     externalCalProvider: 'nasmedia', // 'nasmedia' | 'iboss'
     trendRadar: {
-      googleTrends: [],
-      portalRetailTrends: [],
-      shortFormTrends: [],
+      googleTrends: CURATED_TREND_TOPICS.google || [],
+      portalRetailTrends: CURATED_TREND_TOPICS.portalRetail || [],
+      shortFormTrends: CURATED_TREND_TOPICS.shortForm || [],
       newsletterTrends: CURATED_TREND_TOPICS.newsletter || [],
       brandPromoTrends: CURATED_TREND_TOPICS.brandPromo || []
     },
     isLoadingTrends: false,
+    trendLoadElapsedSec: 0,
+    lastTrendLoadDurationSec: null,
     homeInput: {
       keyword: '',
       company: '',
@@ -215,8 +217,28 @@
     return val;
   }
 
+  function safeParseClientJson(rawText = '') {
+    const cleaned = String(rawText || '')
+      .replace(/```json/gi, '')
+      .replace(/```/g, '')
+      .trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('Perplexity(google/gemini-4-argon) 응답에서 JSON을 추출하지 못했습니다.');
+    }
+    let candidate = jsonMatch[0];
+    try {
+      return JSON.parse(candidate);
+    } catch (firstErr) {
+      const repaired = candidate
+        .replace(/,\s*([\]}])/g, '$1')
+        .replace(/[\u0000-\u0019]+/g, ' ');
+      return JSON.parse(repaired);
+    }
+  }
+
   async function callPerplexityDirectFromBrowser(apiKey, systemPrompt, userPrompt, recencyFilter = 'month', callType = 'draft') {
-    const maxOutTokens = callType === 'trend' ? 3200 : 4096;
+    const maxOutTokens = callType === 'trend' ? 6500 : 8192;
     const res = await fetch('https://api.perplexity.ai/v1/responses', {
       method: 'POST',
       headers: {
@@ -257,11 +279,7 @@
     }
 
     const citations = Array.isArray(data?.citations) ? data.citations : [];
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Perplexity(google/gemini-4-argon) 응답에서 JSON을 추출하지 못했습니다.');
-    }
-    const parsed = stripCitationBracketsClient(JSON.parse(jsonMatch[0]));
+    const parsed = stripCitationBracketsClient(safeParseClientJson(content));
     return { parsed, citations };
   }
 
@@ -733,8 +751,26 @@
       .join('\n');
   }
 
+  let trendTimerId = null;
+
   async function loadTrends(forceRefresh = false) {
     state.isLoadingTrends = true;
+    const startTs = Date.now();
+    state.trendLoadElapsedSec = 0;
+
+    if (trendTimerId) clearInterval(trendTimerId);
+    trendTimerId = setInterval(() => {
+      state.trendLoadElapsedSec = Number(((Date.now() - startTs) / 1000).toFixed(1));
+      const btnEl = document.getElementById('refreshTrendRadarBtn');
+      if (btnEl) {
+        btnEl.textContent = `⏳ AI 실시간 수집 중... (${state.trendLoadElapsedSec.toFixed(1)}초 / 예상 약 12~18초)`;
+      }
+      const bannerTextEl = document.getElementById('trendLoadingBannerText');
+      if (bannerTextEl) {
+        bannerTextEl.textContent = `Gemini-4-Argon 엔진이 5개 탭(쇼츠·뉴스레터·포털·구글·브랜드신상) 실시간 뉴스 50건을 분석하고 있습니다... (${state.trendLoadElapsedSec.toFixed(1)}초 경과 · 예상 소요 약 12~18초)`;
+      }
+    }, 200);
+
     try {
       const url = forceRefresh ? '/api/trends?refresh=1' : '/api/trends';
       const radar = await apiFetch(url);
@@ -746,11 +782,11 @@
         saveClientUsageStats(mergedStats);
       }
       state.trendRadar = {
-        googleTrends: radar.googleTrends || CURATED_TREND_TOPICS.google || [],
-        portalRetailTrends: radar.portalRetailTrends || CURATED_TREND_TOPICS.portalRetail || [],
-        shortFormTrends: radar.shortFormTrends || CURATED_TREND_TOPICS.shortForm || [],
-        newsletterTrends: radar.newsletterTrends || CURATED_TREND_TOPICS.newsletter || [],
-        brandPromoTrends: radar.brandPromoTrends || CURATED_TREND_TOPICS.brandPromo || []
+        googleTrends: (radar.googleTrends && radar.googleTrends.length > 0) ? radar.googleTrends : (CURATED_TREND_TOPICS.google || []),
+        portalRetailTrends: (radar.portalRetailTrends && radar.portalRetailTrends.length > 0) ? radar.portalRetailTrends : (CURATED_TREND_TOPICS.portalRetail || []),
+        shortFormTrends: (radar.shortFormTrends && radar.shortFormTrends.length > 0) ? radar.shortFormTrends : (CURATED_TREND_TOPICS.shortForm || []),
+        newsletterTrends: (radar.newsletterTrends && radar.newsletterTrends.length > 0) ? radar.newsletterTrends : (CURATED_TREND_TOPICS.newsletter || []),
+        brandPromoTrends: (radar.brandPromoTrends && radar.brandPromoTrends.length > 0) ? radar.brandPromoTrends : (CURATED_TREND_TOPICS.brandPromo || [])
       };
     } catch (e) {
       // 정적 배포(GitHub Pages 등) 환경: 브라우저에서 Perplexity API 직접 호출 (30분 스마트 캐시 적용)
@@ -767,8 +803,11 @@
                 stats.cacheHitsOnRefresh = (stats.cacheHitsOnRefresh || 0) + 1;
                 saveClientUsageStats(stats);
                 state.trendRadar = {
-                  ...cachedObj.data,
-                  brandPromoTrends: cachedObj.data?.brandPromoTrends || CURATED_TREND_TOPICS.brandPromo || []
+                  googleTrends: (cachedObj.data?.googleTrends || []).length > 0 ? cachedObj.data.googleTrends : (CURATED_TREND_TOPICS.google || []),
+                  portalRetailTrends: (cachedObj.data?.portalRetailTrends || []).length > 0 ? cachedObj.data.portalRetailTrends : (CURATED_TREND_TOPICS.portalRetail || []),
+                  shortFormTrends: (cachedObj.data?.shortFormTrends || []).length > 0 ? cachedObj.data.shortFormTrends : (CURATED_TREND_TOPICS.shortForm || []),
+                  newsletterTrends: (cachedObj.data?.newsletterTrends || []).length > 0 ? cachedObj.data.newsletterTrends : (CURATED_TREND_TOPICS.newsletter || []),
+                  brandPromoTrends: (cachedObj.data?.brandPromoTrends || []).length > 0 ? cachedObj.data.brandPromoTrends : (CURATED_TREND_TOPICS.brandPromo || [])
                 };
                 loadedFromClientPplx = true;
               }
@@ -804,6 +843,11 @@
         };
       }
     }
+    if (trendTimerId) {
+      clearInterval(trendTimerId);
+      trendTimerId = null;
+    }
+    state.lastTrendLoadDurationSec = Number(((Date.now() - startTs) / 1000).toFixed(1));
     state.isLoadingTrends = false;
   }
 
@@ -1410,10 +1454,15 @@
             </button>
           </div>
 
-          <div class="flex-row" style="padding: 8px 0;">
+          <div class="flex-row" style="padding: 8px 0; gap: 10px;">
             ${state.homeDiscoveryTab === 'trends' ? `
-              <button type="button" class="text-action" id="refreshTrendRadarBtn">
-                ${state.isLoadingTrends ? '업데이트 중...' : '↻ 실시간 트렌드 새로고침'}
+              ${state.lastTrendLoadDurationSec && !state.isLoadingTrends ? `
+                <span style="font-size: 11.5px; color: var(--status-green); font-weight: 700;">
+                  ✓ 최근 업데이트 완료 (${state.lastTrendLoadDurationSec}초 소요)
+                </span>
+              ` : ''}
+              <button type="button" class="text-action" id="refreshTrendRadarBtn" style="${state.isLoadingTrends ? 'color: var(--mk-orange); font-weight: 800;' : ''}">
+                ${state.isLoadingTrends ? `⏳ AI 실시간 수집 중... (${(state.trendLoadElapsedSec || 0).toFixed(1)}초 / 예상 약 12~18초)` : '↻ 실시간 트렌드 새로고침 (약 12~18초 소요)'}
               </button>
             ` : state.homeDiscoveryTab === 'calendar' ? `
               <button type="button" class="btn btn-sm btn-outline-orange" id="openIbossPopupBtn">
@@ -1431,6 +1480,14 @@
         <div style="padding: 22px 26px;">
           ${state.homeDiscoveryTab === 'trends' ? `
             <!-- [탭 1: 실시간 트렌드 키워드 추천 10선] -->
+            ${state.isLoadingTrends ? `
+              <div style="margin-bottom: 12px; padding: 10px 14px; background-color: var(--mk-orange-light); border: 1px solid var(--mk-orange-border); border-radius: var(--radius-general); display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                <span id="trendLoadingBannerText" style="font-size: 12.5px; font-weight: 700; color: var(--mk-orange);">
+                  Gemini-4-Argon 엔진이 5개 탭(쇼츠·뉴스레터·포털·구글·브랜드신상) 실시간 뉴스 50건을 분석하고 있습니다... (${(state.trendLoadElapsedSec || 0).toFixed(1)}초 경과 · 예상 소요 약 12~18초)
+                </span>
+                <span style="font-size: 11.5px; color: var(--text-secondary); white-space: nowrap;">기존 목록을 보시면서 바로 클릭하셔도 됩니다</span>
+              </div>
+            ` : ''}
             <div class="flex-between mb-8">
               <p style="font-size: 13px; color: var(--text-secondary);">
                 원하는 트렌드 키워드를 클릭하면 가장 알맞은 콘텐츠 유형(01~05)과 카테고리로 <strong>즉시 기사 초안이 생성</strong>됩니다.
@@ -1696,9 +1753,12 @@
     });
 
     document.getElementById('refreshTrendRadarBtn')?.addEventListener('click', async () => {
+      if (state.isLoadingTrends) return;
       syncHomeInputs();
+      state.isLoadingTrends = true;
+      render(true);
       await loadTrends(true);
-      showToast('구글 트렌드 및 포털 실시간 화제 키워드 10선을 최신 상태로 업데이트했습니다.');
+      showToast(`✓ 5개 탭 실시간 화제 키워드 50선을 최신 상태로 업데이트했습니다! (${state.lastTrendLoadDurationSec || 0}초 소요)`);
       render(true);
     });
 

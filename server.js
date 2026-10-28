@@ -228,9 +228,31 @@ function recordPerplexityUsage(usage = {}, callType = 'draft') {
   savePersistedUsageStats();
 }
 
+// JSON 문자열 파싱 안전 헬퍼 (코드블록 제거, 트레일링 콤마 교정 등)
+function safeParseJsonFromText(rawText = '') {
+  const cleaned = String(rawText || '')
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error('Perplexity(google/gemini-4-argon) 응답에서 JSON 구조를 추출하지 못했습니다.');
+  }
+  let candidate = jsonMatch[0];
+  try {
+    return JSON.parse(candidate);
+  } catch (firstErr) {
+    // 트레일링 콤마(,)나 제어문자 제거 후 재시도
+    const repaired = candidate
+      .replace(/,\s*([\]}])/g, '$1')
+      .replace(/[\u0000-\u0019]+/g, ' ');
+    return JSON.parse(repaired);
+  }
+}
+
 // Perplexity Responses API (/v1/responses, model: "google/gemini-4-argon") 호출 헬퍼
 async function callPerplexityJson(apiKey, systemPrompt, userPrompt, recencyFilter = 'month', callType = 'draft') {
-  const maxOutTokens = callType === 'trend' ? 3200 : 4096;
+  const maxOutTokens = callType === 'trend' ? 6500 : 8192;
   const payload = {
     model: DEFAULT_PPLX_MODEL,
     instructions: systemPrompt,
@@ -273,12 +295,7 @@ async function callPerplexityJson(apiKey, systemPrompt, userPrompt, recencyFilte
   }
 
   const citations = Array.isArray(data?.citations) ? data.citations : [];
-
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error('Perplexity(google/gemini-4-argon) 응답에서 JSON 구조를 추출하지 못했습니다.');
-  }
-  const parsed = stripCitationBrackets(JSON.parse(jsonMatch[0]));
+  const parsed = stripCitationBrackets(safeParseJsonFromText(content));
   return { parsed, citations };
 }
 
@@ -698,6 +715,9 @@ async function fetchLiveTrendRadar(apiKey = '', forcePerplexity = false) {
   }
 
   // 2) 최근 7일(when:7d) 카테고리별 실제 최신 뉴스 5종(브랜드 신상·프로모션 포함) + 실시간 유튜브 쇼츠 수집
+  const fallbackShortFormPool = [...(CURATED_TREND_TOPICS.shortForm || [])];
+  const fallbackPortalPool = [...(CURATED_TREND_TOPICS.portalRetail || [])];
+  const fallbackGooglePool = [...(CURATED_TREND_TOPICS.google || [])];
   const fallbackNewsletterPool = [...(CURATED_TREND_TOPICS.newsletter || [])];
   const fallbackBrandPromoPool = [...(CURATED_TREND_TOPICS.brandPromo || [])];
   try {
@@ -850,10 +870,10 @@ async function fetchLiveTrendRadar(apiKey = '', forcePerplexity = false) {
       const pplxTrends = await fetchPerplexityTrends(apiKey, rawContextLines.join('\n'));
       if (pplxTrends && Array.isArray(pplxTrends.shortFormTrends)) {
         return {
-          shortFormTrends: ensureTenItems(pplxTrends.shortFormTrends, [...shortFormTrends, ...fallbackNewsletterPool]),
+          shortFormTrends: ensureTenItems(pplxTrends.shortFormTrends, [...shortFormTrends, ...fallbackShortFormPool]),
           newsletterTrends: ensureTenItems(pplxTrends.newsletterTrends || [], fallbackNewsletterPool),
-          portalRetailTrends: ensureTenItems(pplxTrends.portalRetailTrends || [], [...portalRetailTrends, ...fallbackNewsletterPool]),
-          googleTrends: ensureTenItems(googleTrends, [...(pplxTrends.googleTrends || []), ...portalRetailTrends]),
+          portalRetailTrends: ensureTenItems(pplxTrends.portalRetailTrends || [], [...portalRetailTrends, ...fallbackPortalPool]),
+          googleTrends: ensureTenItems(googleTrends, [...(pplxTrends.googleTrends || []), ...fallbackGooglePool]),
           brandPromoTrends: ensureTenItems(pplxTrends.brandPromoTrends || [], [...brandPromoTrends, ...fallbackBrandPromoPool]),
           usedPerplexity: true
         };
@@ -863,33 +883,10 @@ async function fetchLiveTrendRadar(apiKey = '', forcePerplexity = false) {
     }
   }
 
-  if (shortFormTrends.length === 0) {
-    shortFormTrends.push(
-      { keyword: '편의점 신상 꿀조합 레시피', badge: '🎬 쇼츠·릴스 화제', desc: '유튜브 쇼츠와 인스타 릴스에서 수백만 조회수를 기록 중인 편의점 신상품 조합 트렌드입니다.' },
-      { keyword: '다이소 뷰티 갓성비 하울', badge: '📱 릴스·쇼츠 바이럴', desc: '숏폼 크리에이터들의 발색·성분 비교 영상으로 품절 대란이 이어지는 다이소 화장품 열풍입니다.' },
-      { keyword: '수건케이크 · 과일모찌 ASMR', badge: '🎬 쇼츠 먹방 열풍', desc: '단면을 자르는 시각적 효과와 식감 ASMR 영상으로 MZ세대 오픈런을 부른 디저트 트렌드입니다.' }
-    );
-  }
-
-  if (googleTrends.length === 0) {
-    googleTrends.push(
-      { keyword: '초코파이 리뉴얼', badge: '검색량 500+', desc: '장수 제과 브랜드 신제품 및 리뉴얼 출시로 급상승한 키워드입니다.' },
-      { keyword: '다이소 더마 뷰티', badge: '검색량 1000+', desc: '제약사 협업 3,000~5,000원대 가성비 스킨케어 라인업 화제입니다.' },
-      { keyword: '성수동 팝업스토어', badge: '검색량 500+', desc: '주말 방문객이 몰리는 패션·뷰티 체험형 팝업스토어 트렌드입니다.' }
-    );
-  }
-
-  if (portalRetailTrends.length === 0) {
-    portalRetailTrends.push(
-      { keyword: '편의점 전용 신상 디저트', badge: '포털 유통 화제', desc: '편의점 채널별로 단독 출시되는 베이커리·디저트 도장깨기 열풍입니다.' },
-      { keyword: '다이소 뷰티 오픈런', badge: '포털 쇼핑 화제', desc: '소용량·균일가 화장품 품귀 현상과 입고 알림 신청 증가 현상입니다.' }
-    );
-  }
-
   return {
-    googleTrends: ensureTenItems(googleTrends, [...portalRetailTrends, ...fallbackNewsletterPool]),
-    portalRetailTrends: ensureTenItems(portalRetailTrends, [...fallbackNewsletterPool, ...shortFormTrends]),
-    shortFormTrends: ensureTenItems(shortFormTrends, [...fallbackNewsletterPool, ...portalRetailTrends]),
+    googleTrends: ensureTenItems(googleTrends, [...fallbackGooglePool, ...portalRetailTrends]),
+    portalRetailTrends: ensureTenItems(portalRetailTrends, [...fallbackPortalPool, ...fallbackNewsletterPool]),
+    shortFormTrends: ensureTenItems(shortFormTrends, [...fallbackShortFormPool, ...portalRetailTrends]),
     newsletterTrends: ensureTenItems(fallbackNewsletterPool, [...portalRetailTrends, ...shortFormTrends]),
     brandPromoTrends: ensureTenItems(brandPromoTrends, fallbackBrandPromoPool)
   };
