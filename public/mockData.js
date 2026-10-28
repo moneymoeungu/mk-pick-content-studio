@@ -460,23 +460,24 @@ function paraphraseNewsToMkFact(rawTitle = '', keyword = '', sourceName = '', id
 
   const isShortForm = /쇼츠|Shorts|릴스|숏폼/i.test(sourceName);
 
-  // 문장 구조가 매번 똑같이 반복되지 않도록 뉴스 성격 및 순서(idx)에 따라 서로 다른 매경 기사 문장 프레임 적용
+  // 원문 기사의 실제 팩트가 왜곡되지 않도록 원문 핵심 내용을 보존하여 매경 문체("~합니다")로 정리
   let paraphrasedSentence = '';
+  const cleanOriginal = String(rawTitle || '')
+    .replace(/#[a-zA-Z0-9가-힣_]+/g, '')
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/ - [^-]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
   if (isShortForm) {
-    paraphrasedSentence = `유튜브 쇼츠와 인스타그램 릴스 등 숏폼 플랫폼에서는 '${keyword}' 관련 ${keyEntities ? `${keyEntities} 키워드를 중심으로 ` : ''}실사용 후기와 현장 대기 인증 영상이 빠르게 확산하고 있습니다.`;
-  } else if (/오픈런|새벽|웨이팅|품귀|품절|떡픈런|줄/.test(cleaned)) {
-    paraphrasedSentence = `현장에서는 ${keyEntities ? `${keyEntities} 등을 중심으로 ` : ''}'${keyword}' 한정 수량을 구매하려는 오픈런 대기열이 이어지며 ${numText}높은 체감 인기를 증명하고 있습니다.`;
-  } else if (/출시|내놔|내놨다|선보|신상|전용|백화점|팝업|입점/.test(cleaned)) {
-    paraphrasedSentence = `유통·식품업계는 ${keyEntities ? `${keyEntities} 등 ` : ''}'${keyword}' 수요를 겨냥한 전용 라인업과 백화점 팝업 매장을 잇달아 선보이며 ${numText}소비자 접점을 넓히고 있습니다.`;
-  } else if (/할인|프로모션|혜택|이벤트|무료|지원/.test(cleaned)) {
-    paraphrasedSentence = `주요 브랜드와 플랫폼은 '${keyword}' 관련 ${keyEntities ? `${keyEntities} 등 ` : ''}맞춤형 할인 프로모션과 참여형 혜택을 강화하며 ${numText}실속파 소비자의 호응을 얻고 있습니다.`;
+    paraphrasedSentence = cleanOriginal
+      ? `유튜브 쇼츠 화제 영상("${cleanOriginal}")을 중심으로 소비자들의 실사용 리뷰와 추천 후기가 빠르게 확산하고 있습니다.`
+      : `유튜브 쇼츠 등 숏폼 플랫폼에서 '${keyword}' 관련 실사용 후기와 언박싱 영상이 확산하고 있습니다.`;
+  } else if (cleanOriginal) {
+    const srcLabel = sourceName ? `${sourceName} 보도에 따르면, ` : '';
+    paraphrasedSentence = `${srcLabel}"${cleanOriginal}" 소식이 전해지며 ${numText}소비자와 업계의 관심을 모으고 있습니다.`;
   } else {
-    const templates = [
-      `최근 소비 시장에서는 '${keyword}' 트렌드가 부상하면서 ${keyEntities ? `${keyEntities} 등 ` : ''}차별화된 경험과 품질을 앞세운 브랜드들이 ${numText}주목받고 있습니다.`,
-      `${keyEntities ? `${keyEntities} 사례에서 볼 수 있듯 ` : ''}'${keyword}' 열풍은 단순 유행을 넘어 2030 세대의 취향 인증 소비로 자리 잡으며 ${numText}카테고리 전반의 성장을 이끌고 있습니다.`,
-      `업계에서는 '${keyword}' 관련 ${keyEntities ? `${keyEntities} 등 ` : ''}세분화된 상품 기획과 온·오프라인 연계 마케팅을 통해 ${numText}신규 수요를 적극 흡수하고 있습니다.`
-    ];
-    paraphrasedSentence = templates[idx % templates.length];
+    paraphrasedSentence = `최근 시장에서 '${keyword}' 관련 ${keyEntities ? `${keyEntities} 등 ` : ''}신규 소식이 전해지며 주목받고 있습니다.`;
   }
 
   return {

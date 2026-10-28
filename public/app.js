@@ -106,7 +106,7 @@
   const CLIENT_STORAGE_KEY = 'mk_pplx_api_key_v1';
   const CLIENT_DISCONNECTED_FLAG = 'mk_pplx_disconnected_v1';
   const CLIENT_USAGE_KEY = 'mk_pplx_usage_stats_v1';
-  const CLIENT_TREND_CACHE_KEY = 'mk_pplx_trend_cache_v3';
+  const CLIENT_TREND_CACHE_KEY = 'mk_pplx_trend_cache_v4';
   const CLIENT_WORKS_STORAGE_KEY = 'mk_pplx_saved_works_v1';
   const CLIENT_UI_STATE_KEY = 'mk_pplx_ui_state_v1';
   const CLIENT_TREND_TTL_MS = 30 * 60 * 1000; // 30분 캐시
@@ -763,11 +763,11 @@
       state.trendLoadElapsedSec = Number(((Date.now() - startTs) / 1000).toFixed(1));
       const btnEl = document.getElementById('refreshTrendRadarBtn');
       if (btnEl) {
-        btnEl.textContent = `⏳ AI 실시간 수집 중... (${state.trendLoadElapsedSec.toFixed(1)}초 / 예상 약 12~18초)`;
+        btnEl.textContent = `⏳ 실시간 수집 중... (${state.trendLoadElapsedSec.toFixed(1)}초 / 예상 약 1~3초)`;
       }
       const bannerTextEl = document.getElementById('trendLoadingBannerText');
       if (bannerTextEl) {
-        bannerTextEl.textContent = `Gemini-4-Argon 엔진이 5개 탭(쇼츠·뉴스레터·포털·구글·브랜드신상) 실시간 뉴스 50건을 분석하고 있습니다... (${state.trendLoadElapsedSec.toFixed(1)}초 경과 · 예상 소요 약 12~18초)`;
+        bannerTextEl.textContent = `5개 탭(유튜브 쇼츠·뉴스레터·포털·구글 트렌드·브랜드신상) 실시간 원본 데이터를 수집하고 있습니다... (${state.trendLoadElapsedSec.toFixed(1)}초 경과 · 예상 소요 약 1~3초)`;
       }
     }, 200);
 
@@ -881,8 +881,11 @@
   }
 
   async function initApp() {
-    // 이전에 수집되어 브라우저에 캐시된 실제 트렌드가 있으면 먼저 복원 (인위적 고정 샘플 사용 안 함)
+    // 구버전 캐시(고정 샘플이 섞여 있던 v1~v3) 즉시 삭제 후 최신 캐시만 복원
     try {
+      localStorage.removeItem('mk_pplx_trend_cache_v1');
+      localStorage.removeItem('mk_pplx_trend_cache_v2');
+      localStorage.removeItem('mk_pplx_trend_cache_v3');
       const cachedRaw = localStorage.getItem(CLIENT_TREND_CACHE_KEY);
       if (cachedRaw) {
         const cachedObj = JSON.parse(cachedRaw);
@@ -1476,7 +1479,7 @@
                 </span>
               ` : ''}
               <button type="button" class="text-action" id="refreshTrendRadarBtn" style="${state.isLoadingTrends ? 'color: var(--mk-orange); font-weight: 800;' : ''}">
-                ${state.isLoadingTrends ? `⏳ AI 실시간 수집 중... (${(state.trendLoadElapsedSec || 0).toFixed(1)}초 / 예상 약 12~18초)` : '↻ 실시간 트렌드 새로고침 (약 12~18초 소요)'}
+                ${state.isLoadingTrends ? `⏳ 실시간 수집 중... (${(state.trendLoadElapsedSec || 0).toFixed(1)}초 / 예상 약 1~3초)` : '↻ 실시간 트렌드 새로고침 (약 1~3초 소요)'}
               </button>
             ` : state.homeDiscoveryTab === 'calendar' ? `
               <button type="button" class="btn btn-sm btn-outline-orange" id="openIbossPopupBtn">
@@ -1497,7 +1500,7 @@
             ${state.isLoadingTrends ? `
               <div style="margin-bottom: 12px; padding: 10px 14px; background-color: var(--mk-orange-light); border: 1px solid var(--mk-orange-border); border-radius: var(--radius-general); display: flex; align-items: center; justify-content: space-between; gap: 10px;">
                 <span id="trendLoadingBannerText" style="font-size: 12.5px; font-weight: 700; color: var(--mk-orange);">
-                  Gemini-4-Argon 엔진이 5개 탭(쇼츠·뉴스레터·포털·구글·브랜드신상) 실시간 뉴스 50건을 분석하고 있습니다... (${(state.trendLoadElapsedSec || 0).toFixed(1)}초 경과 · 예상 소요 약 12~18초)
+                  5개 탭(유튜브 쇼츠·뉴스레터·포털·구글 트렌드·브랜드신상) 실시간 원본 데이터를 수집하고 있습니다... (${(state.trendLoadElapsedSec || 0).toFixed(1)}초 경과 · 예상 소요 약 1~3초)
                 </span>
                 <span style="font-size: 11.5px; color: var(--text-secondary); white-space: nowrap;">기존 목록을 보시면서 바로 클릭하셔도 됩니다</span>
               </div>
