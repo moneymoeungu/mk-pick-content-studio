@@ -235,27 +235,29 @@ async function callPerplexityJson(apiKey, systemPrompt, userPrompt, recencyFilte
   return { parsed, citations };
 }
 
-// Perplexity API + 최근 7일 실시간 뉴스·쇼츠·구글트렌드 원시 데이터를 결합해 '진짜 이번 주 최신 트렌드' 발굴 (탭별 10개씩, 탭 간 중복 방지)
+// Perplexity API + 최근 7일 실시간 뉴스·쇼츠·구글트렌드 원시 데이터를 결합해 '진짜 이번 주 최신 트렌드' 발굴 (5개 탭별 10개씩, 탭 간 중복 방지)
 async function fetchPerplexityTrends(apiKey, rawLiveContext) {
   const sys = `당신은 매일경제 디지털뉴스룸(MK Pick) 실시간 트렌드 데스크입니다.
 철칙:
 1. '두바이 초콜릿/쿠키', '버터떡', '우베', '탕후루', '요아정'처럼 이미 유행이 지났거나 연말·분기 결산 회고 기사에 나오는 과거 유행어를 절대 포함하지 마세요.
-2. 반드시 아래 제공된 [최근 7일 이내 실시간 보도·쇼츠·구글트렌드 원시 데이터]에 등장하는 이번 주 실제 신상품, 품절템, 팝업스토어, MZ 소비 현상만 선별하세요.
-3. 4개 탭(shortFormTrends, newsletterTrends, portalRetailTrends, googleTrends) 각각 정확히 10개씩 작성하되, 같은 브랜드나 같은 주제를 중복해서 넣지 마세요.
-4. 각주 번호([1], [2])를 넣지 말고 순수 JSON 객체만 출력하세요.`;
+2. 반드시 아래 제공된 [최근 7일 이내 실시간 보도·쇼츠·구글트렌드 원시 데이터]에 등장하는 이번 주 실제 신상품, 브랜드 프로모션, 품절템, 팝업스토어, MZ 소비 현상만 선별하세요.
+3. 5개 탭(shortFormTrends, newsletterTrends, portalRetailTrends, googleTrends, brandPromoTrends) 각각 정확히 10개씩 작성하되, 같은 브랜드나 같은 주제를 중복해서 넣지 마세요.
+4. 특히 brandPromoTrends 탭은 [식음료·외식], [뷰티·패션], [유통·리빙], [가전·IT] 4대 업종의 주요 브랜드가 이번 주에 발표한 '신상품·신메뉴 출시' 및 '할인·사은품·콜라보 프로모션' 최신 뉴스 10선으로 고르게 구성하세요.
+5. 각주 번호([1], [2])를 넣지 말고 순수 JSON 객체만 출력하세요.`;
 
   const usr = `[이번 주(최근 7일 이내) 실제 수집된 카테고리별 실시간 한국 뉴스·쇼츠·급상승 검색어 원시 데이터]
 ${rawLiveContext}
 
 위 최근 7일 이내 실시간 데이터를 바탕으로, 탭별로 서로 겹치지 않는 **10개씩(각 배열당 10개 항목 필수)**을 JSON으로 정리하세요.
-- keyword는 2~4어절의 직관적인 최신 트렌드 키워드로 작성하세요 (예: "다이소 5000원 겨울 니트", "유한양행 다이소 더마푸라민Rx", "편의점 반값 패딩 열풍", "2030 백화점 코어룩", "한남동 팔란티어 팝업 품절", "이마트 와우샵 1만원 가전", "제로 주세요 영점소비", "함양 오르GO 굿즈 팝업" 등).
-- desc는 구체적인 브랜드명·가격·수치·일정을 담아 "~합니다" 체 1문장으로 작성하세요.
+- keyword는 2~4어절의 직관적인 최신 트렌드·브랜드 신상·프로모션 키워드로 작성하세요.
+- desc는 구체적인 브랜드명·신제품명·가격·프로모션 혜택·일정을 담아 "~합니다" 체 1문장으로 작성하세요.
 
 {
   "shortFormTrends": [{"keyword": "숏폼·바이럴·오픈런 키워드 (10개)", "badge": "🎬 쇼츠·릴스 화제", "desc": "이번 주 화제 이유와 수치 1문장"}],
   "newsletterTrends": [{"keyword": "MZ 소비문화·패션·신조어 키워드 (10개)", "category": "MZ·소비 이슈", "desc": "이번 주 화제 이유와 수치 1문장"}],
   "portalRetailTrends": [{"keyword": "편의점·다이소·백화점 신상 키워드 (10개)", "badge": "포털·유통 신상", "desc": "이번 주 출시·품절·프로모션 팩트 1문장"}],
-  "googleTrends": [{"keyword": "오늘·이번주 급상승 키워드 (10개)", "badge": "실시간 급상승", "desc": "급상승 배경 1문장"}]
+  "googleTrends": [{"keyword": "오늘·이번주 급상승 키워드 (10개)", "badge": "실시간 급상승", "desc": "급상승 배경 1문장"}],
+  "brandPromoTrends": [{"keyword": "브랜드명 + 신상품/프로모션 핵심 키워드 (10개)", "company": "브랜드/기업명", "sector": "식음료·외식 | 뷰티·패션 | 유통·리빙 | 가전·IT 중 택1", "badge": "업종 · 신상품/프로모션", "desc": "출시 신제품 특징 및 프로모션 혜택 팩트 1문장 (~합니다 체)"}]
 }`;
   const { parsed } = await callPerplexityJson(apiKey, sys, usr, 'week', 'trend');
   return parsed;
@@ -520,12 +522,46 @@ ${newsContext || '실시간 웹 검색 결과를 바탕으로 최신 팩트 반�
   };
 }
 
-// 실시간 트렌드 키워드 수집 (최근 7일 실시간 뉴스·구글트렌드·유튜브쇼츠 원시 수집 후 Perplexity로 정제)
+// 업종 분류 헬퍼 (식음료·외식 / 뷰티·패션 / 유통·리빙 / 가전·IT)
+function detectBrandPromoSector(text = '') {
+  if (/(?:뷰티|화장품|앰플|스킨케어|코스메틱|올리브영|아모레|LG생활건강|무신사|패션|의류|아우터|니트|슈즈|운동화|향수)/.test(text)) {
+    return '뷰티·패션';
+  }
+  if (/(?:가전|AI|갤럭시|아이폰|삼성전자|LG전자|노트북|TV|세탁|건조기|청소기|IT|로봇|디지털)/.test(text)) {
+    return '가전·IT';
+  }
+  if (/(?:백화점|마트|이마트|롯데마트|홈플러스|오늘의집|가구|침구|인테리어|리빙|호텔|리조트|이커머스|쿠팡|컬리|다이소)/.test(text)) {
+    return '유통·리빙';
+  }
+  return '식음료·외식';
+}
+
+// 실시간 트렌드 키워드 수집 (최근 7일 실시간 뉴스·구글트렌드·유튜브쇼츠·브랜드 신상/프로모션 원시 수집 후 Perplexity로 정제)
 async function fetchLiveTrendRadar(apiKey = '', forcePerplexity = false) {
   const googleTrends = [];
   const portalRetailTrends = [];
   const shortFormTrends = [];
+  const brandPromoTrends = [];
   const rawContextLines = [];
+  const collectedUrlMap = []; // [{ title, kw, url, source, pubDateShort }]
+
+  function buildFallbackNewsUrl(kw = '') {
+    return `https://news.google.com/search?q=${encodeURIComponent(kw)}&hl=ko&gl=KR&ceid=KR:ko`;
+  }
+
+  function findMatchingArticleUrl(keyword = '', desc = '') {
+    const tokens = `${keyword} ${desc}`
+      .split(/[\s·,()\[\]']+/)
+      .map(s => s.trim())
+      .filter(s => s.length >= 2);
+    for (const entry of collectedUrlMap) {
+      const matchCount = tokens.filter(t => entry.title.includes(t) || entry.kw.includes(t)).length;
+      if (matchCount >= 2 && entry.url) {
+        return entry.url;
+      }
+    }
+    return buildFallbackNewsUrl(keyword);
+  }
 
   // 1) Google Trends KR 오늘 실시간 급상승 (최대 10개)
   try {
@@ -541,12 +577,16 @@ async function fetchLiveTrendRadar(apiKey = '', forcePerplexity = false) {
         const title = decodeXmlEntities((block.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || '');
         const traffic = decodeXmlEntities((block.match(/<ht:approx_traffic>([\s\S]*?)<\/ht:approx_traffic>/) || [])[1] || '급상승');
         const newsTitle = decodeXmlEntities((block.match(/<ht:news_item_title>([\s\S]*?)<\/ht:news_item_title>/) || [])[1] || '');
+        const newsUrl = decodeXmlEntities((block.match(/<ht:news_item_url>([\s\S]*?)<\/ht:news_item_url>/) || [])[1] || '');
         if (title) {
+          const itemUrl = newsUrl || buildFallbackNewsUrl(title);
           googleTrends.push({
             keyword: title,
             badge: `검색량 ${traffic}`,
-            desc: newsTitle || `${title} 관련 오늘 실시간 급상승 검색 트렌드`
+            desc: newsTitle || `${title} 관련 오늘 실시간 급상승 검색 트렌드입니다.`,
+            url: itemUrl
           });
+          collectedUrlMap.push({ title: `${title} ${newsTitle}`, kw: title, url: itemUrl });
           rawContextLines.push(`[구글트렌드 실시간] ${title} (${traffic}): ${newsTitle}`);
         }
       }
@@ -555,13 +595,15 @@ async function fetchLiveTrendRadar(apiKey = '', forcePerplexity = false) {
     // ignore
   }
 
-  // 2) 최근 7일(when:7d) 카테고리별 실제 최신 뉴스 4종 + 실시간 유튜브 쇼츠 수집
+  // 2) 최근 7일(when:7d) 카테고리별 실제 최신 뉴스 5종(브랜드 신상·프로모션 포함) + 실시간 유튜브 쇼츠 수집
   const fallbackNewsletterPool = [...(CURATED_TREND_TOPICS.newsletter || [])];
+  const fallbackBrandPromoPool = [...(CURATED_TREND_TOPICS.brandPromo || [])];
   try {
-    const [retailNews, viralNews, mzCultureNews, ytShorts] = await Promise.all([
+    const [retailNews, viralNews, mzCultureNews, brandPromoNews, ytShorts] = await Promise.all([
       fetchRealTimeKoreanNews('(다이소 OR 편의점 OR 올리브영 OR 이마트 OR 백화점) (출시 OR 신상 OR 단독 OR 5000원 OR 반값)', 14, '7d'),
       fetchRealTimeKoreanNews('(품절 OR 오픈런 OR 팝업스토어 OR 굿즈 OR 콜라보)', 14, '7d'),
       fetchRealTimeKoreanNews('(2030 OR MZ세대 OR 유행 OR 열풍) (패션 OR 뷰티 OR 소비 OR 디저트)', 14, '7d'),
+      fetchRealTimeKoreanNews('(신제품 OR 신메뉴 OR 신상품 OR 프로모션 OR 한정판 OR 기획전 OR 콜라보) (출시 OR 선보 OR 진행) (스타벅스 OR 올리브영 OR 아모레 OR 삼성전자 OR LG전자 OR 무신사 OR 호텔 OR 카페 OR 외식 OR 마트)', 18, '7d'),
       fetchYouTubeShorts('편의점 신상 다이소 품절템 팝업스토어', 10)
     ]);
 
@@ -570,11 +612,14 @@ async function fetchLiveTrendRadar(apiKey = '', forcePerplexity = false) {
       const quoted = (n.title.match(/['‘“"]([^'’”"]{2,18})['’”"]/) || [])[1];
       const fallbackKw = n.title.replace(/\[[^\]]*\]/g, '').split(/[,…·?!]/)[0].trim().slice(0, 20);
       const kw = quoted || fallbackKw;
+      const itemUrl = n.link || buildFallbackNewsUrl(kw);
+      collectedUrlMap.push({ title: n.title, kw, url: itemUrl, source: n.source, pubDateShort: n.pubDateShort });
       if (kw && portalRetailTrends.length < 10 && !portalRetailTrends.some(p => p.keyword === kw)) {
         portalRetailTrends.push({
           keyword: kw,
           badge: `${n.source} · ${n.pubDateShort || '최신'}`,
-          desc: paraphraseNewsToMkFact(n.title, kw, n.source).paraphrasedSentence
+          desc: paraphraseNewsToMkFact(n.title, kw, n.source).paraphrasedSentence,
+          url: itemUrl
         });
       }
     });
@@ -584,11 +629,14 @@ async function fetchLiveTrendRadar(apiKey = '', forcePerplexity = false) {
       const quoted = (vn.title.match(/['‘“"]([^'’”"]{2,18})['’”"]/) || [])[1];
       const fallbackKw = vn.title.replace(/\[[^\]]*\]/g, '').split(/[,…·?!]/)[0].trim().slice(0, 20);
       const kw = quoted || fallbackKw;
+      const itemUrl = vn.link || buildFallbackNewsUrl(kw);
+      collectedUrlMap.push({ title: vn.title, kw, url: itemUrl, source: vn.source, pubDateShort: vn.pubDateShort });
       if (kw && shortFormTrends.length < 10 && !shortFormTrends.some(s => s.keyword === kw)) {
         shortFormTrends.push({
           keyword: kw,
           badge: `🎬 바이럴 · ${vn.pubDateShort || '최신'}`,
-          desc: paraphraseNewsToMkFact(vn.title, kw, vn.source).paraphrasedSentence
+          desc: paraphraseNewsToMkFact(vn.title, kw, vn.source).paraphrasedSentence,
+          url: itemUrl
         });
       }
     });
@@ -596,6 +644,33 @@ async function fetchLiveTrendRadar(apiKey = '', forcePerplexity = false) {
     mzCultureNews.forEach(mn => {
       if (!/휩쓴|결산|총정리/.test(mn.title)) {
         rawContextLines.push(`[탭2 MZ·뉴스레터 소비트렌드 (${mn.pubDateShort})] ${mn.title} (${mn.source})`);
+        collectedUrlMap.push({ title: mn.title, kw: mn.title.slice(0, 18), url: mn.link || buildFallbackNewsUrl(mn.title) });
+      }
+    });
+
+    brandPromoNews.forEach(bn => {
+      if (/부고|인사|동정|주가|코스피/.test(bn.title)) return;
+      rawContextLines.push(`[탭5 브랜드 신상·프로모션 (${bn.pubDateShort})] ${bn.title} (${bn.source})`);
+      const cleanedTitle = bn.title.replace(/\[[^\]]*\]/g, '').trim();
+      const firstClause = cleanedTitle.split(/[,…·?!]/)[0].trim();
+      const brandCand = (cleanedTitle.split(/[,…·\s]/)[0] || '').replace(/(은|는|이|가|의)$/, '').trim();
+      const quoted = (cleanedTitle.match(/['‘“"]([^'’”"]{2,20})['’”"]/) || [])[1];
+      const kw = quoted && brandCand && !quoted.includes(brandCand)
+        ? `${brandCand} ${quoted}`
+        : firstClause.slice(0, 24);
+      const sector = detectBrandPromoSector(cleanedTitle);
+      const itemUrl = bn.link || buildFallbackNewsUrl(kw);
+      collectedUrlMap.push({ title: bn.title, kw, url: itemUrl, source: bn.source, pubDateShort: bn.pubDateShort });
+
+      if (kw && brandPromoTrends.length < 10 && !brandPromoTrends.some(b => b.keyword === kw)) {
+        brandPromoTrends.push({
+          keyword: kw,
+          company: brandCand.length >= 2 && brandCand.length <= 10 ? brandCand : '',
+          sector,
+          badge: `${sector} · ${bn.source || '최신 보도'}`,
+          desc: paraphraseNewsToMkFact(bn.title, kw, bn.source).paraphrasedSentence,
+          url: itemUrl
+        });
       }
     });
 
@@ -611,7 +686,8 @@ async function fetchLiveTrendRadar(apiKey = '', forcePerplexity = false) {
           shortFormTrends.push({
             keyword: cleanKw,
             badge: '🎬 유튜브 쇼츠 인기',
-            desc: `유튜브 쇼츠에서 확산 중인 '${cleanKw}' 소비자 리뷰·언박싱 트렌드`
+            desc: `유튜브 쇼츠에서 확산 중인 '${cleanKw}' 소비자 리뷰·언박싱 트렌드입니다.`,
+            url: yt.link || buildFallbackNewsUrl(cleanKw)
           });
         }
       }
@@ -620,19 +696,23 @@ async function fetchLiveTrendRadar(apiKey = '', forcePerplexity = false) {
     // ignore
   }
 
-  // 각 배열이 최소 10개를 유지하도록 보충하는 헬퍼
+  // 각 배열이 최소 10개를 유지하고 원문 링크(url)를 보장하도록 보충하는 헬퍼
   function ensureTenItems(primaryList = [], backupList = []) {
-    const out = [...primaryList];
-    for (const item of backupList) {
+    const out = [];
+    for (const item of [...primaryList, ...backupList]) {
       if (out.length >= 10) break;
+      if (!item || !item.keyword) continue;
       if (!out.some(x => x.keyword === item.keyword)) {
-        out.push(item);
+        out.push({
+          ...item,
+          url: item.url || findMatchingArticleUrl(item.keyword, item.desc || '')
+        });
       }
     }
     return out.slice(0, 10);
   }
 
-  // 3) Perplexity API 키가 연결된 경우: 방금 수집한 최근 7일 실시간 뉴스·쇼츠·구글트렌드 원시 데이터를 바탕으로 정교하게 큐레이션 (탭당 10개 보장)
+  // 3) Perplexity API 키가 연결된 경우: 방금 수집한 최근 7일 실시간 뉴스·쇼츠·구글트렌드·브랜드신상 원시 데이터를 바탕으로 정교하게 큐레이션 (탭당 10개 보장)
   if (apiKey && forcePerplexity) {
     try {
       const pplxTrends = await fetchPerplexityTrends(apiKey, rawContextLines.join('\n'));
@@ -642,6 +722,7 @@ async function fetchLiveTrendRadar(apiKey = '', forcePerplexity = false) {
           newsletterTrends: ensureTenItems(pplxTrends.newsletterTrends || [], fallbackNewsletterPool),
           portalRetailTrends: ensureTenItems(pplxTrends.portalRetailTrends || [], [...portalRetailTrends, ...fallbackNewsletterPool]),
           googleTrends: ensureTenItems(googleTrends, [...(pplxTrends.googleTrends || []), ...portalRetailTrends]),
+          brandPromoTrends: ensureTenItems(pplxTrends.brandPromoTrends || [], [...brandPromoTrends, ...fallbackBrandPromoPool]),
           usedPerplexity: true
         };
       }
@@ -652,24 +733,24 @@ async function fetchLiveTrendRadar(apiKey = '', forcePerplexity = false) {
 
   if (shortFormTrends.length === 0) {
     shortFormTrends.push(
-      { keyword: '편의점 신상 꿀조합 레시피', badge: '🎬 쇼츠·릴스 화제', desc: '유튜브 쇼츠와 인스타 릴스에서 수백만 조회수를 기록 중인 편의점 신상품 조합 트렌드' },
-      { keyword: '다이소 뷰티 갓성비 하울', badge: '📱 릴스·쇼츠 바이럴', desc: '숏폼 크리에이터들의 발색·성분 비교 영상으로 품절 대란이 이어지는 다이소 화장품 열풍' },
-      { keyword: '수건케이크 · 과일모찌 ASMR', badge: '🎬 쇼츠 먹방 열풍', desc: '단면을 자르는 시각적 효과와 식감 ASMR 영상으로 MZ세대 오픈런을 부른 디저트 트렌드' }
+      { keyword: '편의점 신상 꿀조합 레시피', badge: '🎬 쇼츠·릴스 화제', desc: '유튜브 쇼츠와 인스타 릴스에서 수백만 조회수를 기록 중인 편의점 신상품 조합 트렌드입니다.' },
+      { keyword: '다이소 뷰티 갓성비 하울', badge: '📱 릴스·쇼츠 바이럴', desc: '숏폼 크리에이터들의 발색·성분 비교 영상으로 품절 대란이 이어지는 다이소 화장품 열풍입니다.' },
+      { keyword: '수건케이크 · 과일모찌 ASMR', badge: '🎬 쇼츠 먹방 열풍', desc: '단면을 자르는 시각적 효과와 식감 ASMR 영상으로 MZ세대 오픈런을 부른 디저트 트렌드입니다.' }
     );
   }
 
   if (googleTrends.length === 0) {
     googleTrends.push(
-      { keyword: '초코파이 리뉴얼', badge: '검색량 500+', desc: '장수 제과 브랜드 신제품 및 리뉴얼 출시로 급상승한 키워드' },
-      { keyword: '다이소 더마 뷰티', badge: '검색량 1000+', desc: '제약사 협업 3,000~5,000원대 가성비 스킨케어 라인업 화제' },
-      { keyword: '성수동 팝업스토어', badge: '검색량 500+', desc: '주말 방문객이 몰리는 패션·뷰티 체험형 팝업스토어 트렌드' }
+      { keyword: '초코파이 리뉴얼', badge: '검색량 500+', desc: '장수 제과 브랜드 신제품 및 리뉴얼 출시로 급상승한 키워드입니다.' },
+      { keyword: '다이소 더마 뷰티', badge: '검색량 1000+', desc: '제약사 협업 3,000~5,000원대 가성비 스킨케어 라인업 화제입니다.' },
+      { keyword: '성수동 팝업스토어', badge: '검색량 500+', desc: '주말 방문객이 몰리는 패션·뷰티 체험형 팝업스토어 트렌드입니다.' }
     );
   }
 
   if (portalRetailTrends.length === 0) {
     portalRetailTrends.push(
-      { keyword: '편의점 전용 신상 디저트', badge: '포털 유통 화제', desc: '편의점 채널별로 단독 출시되는 베이커리·디저트 도장깨기 열풍' },
-      { keyword: '다이소 뷰티 오픈런', badge: '포털 쇼핑 화제', desc: '소용량·균일가 화장품 품귀 현상과 입고 알림 신청 증가' }
+      { keyword: '편의점 전용 신상 디저트', badge: '포털 유통 화제', desc: '편의점 채널별로 단독 출시되는 베이커리·디저트 도장깨기 열풍입니다.' },
+      { keyword: '다이소 뷰티 오픈런', badge: '포털 쇼핑 화제', desc: '소용량·균일가 화장품 품귀 현상과 입고 알림 신청 증가 현상입니다.' }
     );
   }
 
@@ -677,7 +758,8 @@ async function fetchLiveTrendRadar(apiKey = '', forcePerplexity = false) {
     googleTrends: ensureTenItems(googleTrends, [...portalRetailTrends, ...fallbackNewsletterPool]),
     portalRetailTrends: ensureTenItems(portalRetailTrends, [...fallbackNewsletterPool, ...shortFormTrends]),
     shortFormTrends: ensureTenItems(shortFormTrends, [...fallbackNewsletterPool, ...portalRetailTrends]),
-    newsletterTrends: ensureTenItems(fallbackNewsletterPool, [...portalRetailTrends, ...shortFormTrends])
+    newsletterTrends: ensureTenItems(fallbackNewsletterPool, [...portalRetailTrends, ...shortFormTrends]),
+    brandPromoTrends: ensureTenItems(brandPromoTrends, fallbackBrandPromoPool)
   };
 }
 

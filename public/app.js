@@ -22,7 +22,7 @@
     screen: 'home', // 'home' | 'editor'
     works: [],
     currentWork: null,
-    trendTab: 'shortform', // 'shortform' | 'newsletter' | 'portal' | 'google'
+    trendTab: 'shortform', // 'shortform' | 'newsletter' | 'portal' | 'google' | 'brandpromo'
     homeDiscoveryTab: 'trends', // 'trends' | 'calendar' | 'works'
     calendarMonth: new Date().getMonth() + 1 || 10,
     showExternalCalendarEmbed: false,
@@ -31,7 +31,8 @@
       googleTrends: [],
       portalRetailTrends: [],
       shortFormTrends: [],
-      newsletterTrends: CURATED_TREND_TOPICS.newsletter || []
+      newsletterTrends: CURATED_TREND_TOPICS.newsletter || [],
+      brandPromoTrends: CURATED_TREND_TOPICS.brandPromo || []
     },
     isLoadingTrends: false,
     homeInput: {
@@ -102,7 +103,7 @@
   const CLIENT_STORAGE_KEY = 'mk_pplx_api_key_v1';
   const CLIENT_DISCONNECTED_FLAG = 'mk_pplx_disconnected_v1';
   const CLIENT_USAGE_KEY = 'mk_pplx_usage_stats_v1';
-  const CLIENT_TREND_CACHE_KEY = 'mk_pplx_trend_cache_v1';
+  const CLIENT_TREND_CACHE_KEY = 'mk_pplx_trend_cache_v2';
   const CLIENT_WORKS_STORAGE_KEY = 'mk_pplx_saved_works_v1';
   const CLIENT_TREND_TTL_MS = 30 * 60 * 1000; // 30분 캐시
 
@@ -244,18 +245,20 @@
     const sys = `당신은 매일경제 디지털뉴스룸(MK Pick) 실시간 트렌드 데스크입니다.
 철칙:
 1. '두바이 초콜릿/쿠키', '버터떡', '우베', '탕후루', '요아정'처럼 이미 유행이 지났거나 과거 결산 기사에 나오는 유행어를 절대 포함하지 마세요.
-2. 최근 7일 이내 한국에서 실제 화제가 된 신상품, 품절템, 팝업스토어, MZ 소비 현상만 선별하세요.
-3. 4개 탭(shortFormTrends, newsletterTrends, portalRetailTrends, googleTrends) 각각 정확히 10개씩 작성하되, 중복 없이 순수 JSON 객체만 출력하세요.`;
+2. 최근 7일 이내 한국에서 실제 화제가 된 신상품, 브랜드 프로모션, 품절템, 팝업스토어, MZ 소비 현상만 선별하세요.
+3. 5개 탭(shortFormTrends, newsletterTrends, portalRetailTrends, googleTrends, brandPromoTrends) 각각 정확히 10개씩 작성하되, 중복 없이 순수 JSON 객체만 출력하세요.
+4. 특히 brandPromoTrends 탭은 [식음료·외식], [뷰티·패션], [유통·리빙], [가전·IT] 4대 업종의 주요 브랜드가 이번 주에 발표한 '신상품·신메뉴 출시' 및 '할인·사은품·콜라보 프로모션' 최신 뉴스 10선으로 고르게 구성하세요.`;
 
-    const usr = `이번 주 대한민국에서 가장 화제가 되고 있는 실시간 유통·팝업·패션·라이프스타일·IT 트렌드 키워드를 탭별로 서로 겹치지 않게 정확히 10개씩 JSON으로 작성하세요.
-- keyword는 2~4어절의 직관적인 최신 트렌드 키워드로 작성하세요.
-- desc는 구체적인 브랜드명·가격·수치·일정을 담아 "~합니다" 체 1문장으로 작성하세요.
+    const usr = `이번 주 대한민국에서 가장 화제가 되고 있는 실시간 유통·팝업·패션·라이프스타일·IT 트렌드 및 브랜드 신상품·프로모션 뉴스 키워드를 탭별로 서로 겹치지 않게 정확히 10개씩 JSON으로 작성하세요.
+- keyword는 2~4어절의 직관적인 최신 트렌드·브랜드 신상·프로모션 키워드로 작성하세요.
+- desc는 구체적인 브랜드명·가격·수치·프로모션 혜택·일정을 담아 "~합니다" 체 1문장으로 작성하세요.
 
 {
   "shortFormTrends": [{"keyword": "숏폼·바이럴·오픈런 키워드 (10개)", "badge": "🎬 쇼츠·릴스 화제", "desc": "이번 주 화제 이유와 수치 1문장"}],
   "newsletterTrends": [{"keyword": "MZ 소비문화·패션·신조어 키워드 (10개)", "category": "MZ·소비 이슈", "desc": "이번 주 화제 이유와 수치 1문장"}],
   "portalRetailTrends": [{"keyword": "편의점·다이소·백화점 신상 키워드 (10개)", "badge": "포털·유통 신상", "desc": "이번 주 출시·품절·프로모션 팩트 1문장"}],
-  "googleTrends": [{"keyword": "오늘·이번주 급상승 키워드 (10개)", "badge": "실시간 급상승", "desc": "급상승 배경 1문장"}]
+  "googleTrends": [{"keyword": "오늘·이번주 급상승 키워드 (10개)", "badge": "실시간 급상승", "desc": "급상승 배경 1문장"}],
+  "brandPromoTrends": [{"keyword": "브랜드명 + 신상품/프로모션 키워드 (10개)", "company": "브랜드/기업명", "sector": "식음료·외식 | 뷰티·패션 | 유통·리빙 | 가전·IT 중 택1", "badge": "업종 · 신상품/프로모션", "desc": "출시 신제품 특징 및 프로모션 혜택 팩트 1문장 (~합니다 체)"}]
 }`;
     const { parsed } = await callPerplexityDirectFromBrowser(apiKey, sys, usr, 'week', 'trend');
     return parsed;
@@ -705,7 +708,8 @@
         googleTrends: radar.googleTrends || CURATED_TREND_TOPICS.google || [],
         portalRetailTrends: radar.portalRetailTrends || CURATED_TREND_TOPICS.portalRetail || [],
         shortFormTrends: radar.shortFormTrends || CURATED_TREND_TOPICS.shortForm || [],
-        newsletterTrends: radar.newsletterTrends || CURATED_TREND_TOPICS.newsletter || []
+        newsletterTrends: radar.newsletterTrends || CURATED_TREND_TOPICS.newsletter || [],
+        brandPromoTrends: radar.brandPromoTrends || CURATED_TREND_TOPICS.brandPromo || []
       };
     } catch (e) {
       // 정적 배포(GitHub Pages 등) 환경: 브라우저에서 Perplexity API 직접 호출 (30분 스마트 캐시 적용)
@@ -721,7 +725,10 @@
                 const stats = getClientUsageStats();
                 stats.cacheHitsOnRefresh = (stats.cacheHitsOnRefresh || 0) + 1;
                 saveClientUsageStats(stats);
-                state.trendRadar = cachedObj.data;
+                state.trendRadar = {
+                  ...cachedObj.data,
+                  brandPromoTrends: cachedObj.data?.brandPromoTrends || CURATED_TREND_TOPICS.brandPromo || []
+                };
                 loadedFromClientPplx = true;
               }
             }
@@ -732,7 +739,8 @@
               googleTrends: (pplxTrends.googleTrends || []).slice(0, 10).length > 0 ? pplxTrends.googleTrends.slice(0, 10) : (CURATED_TREND_TOPICS.google || []),
               portalRetailTrends: (pplxTrends.portalRetailTrends || []).slice(0, 10).length > 0 ? pplxTrends.portalRetailTrends.slice(0, 10) : (CURATED_TREND_TOPICS.portalRetail || []),
               shortFormTrends: (pplxTrends.shortFormTrends || []).slice(0, 10).length > 0 ? pplxTrends.shortFormTrends.slice(0, 10) : (CURATED_TREND_TOPICS.shortForm || []),
-              newsletterTrends: (pplxTrends.newsletterTrends || []).slice(0, 10).length > 0 ? pplxTrends.newsletterTrends.slice(0, 10) : (CURATED_TREND_TOPICS.newsletter || [])
+              newsletterTrends: (pplxTrends.newsletterTrends || []).slice(0, 10).length > 0 ? pplxTrends.newsletterTrends.slice(0, 10) : (CURATED_TREND_TOPICS.newsletter || []),
+              brandPromoTrends: (pplxTrends.brandPromoTrends || []).slice(0, 10).length > 0 ? pplxTrends.brandPromoTrends.slice(0, 10) : (CURATED_TREND_TOPICS.brandPromo || [])
             };
             state.trendRadar = mergedRadar;
             localStorage.setItem(CLIENT_TREND_CACHE_KEY, JSON.stringify({
@@ -750,7 +758,8 @@
           googleTrends: CURATED_TREND_TOPICS.google || [],
           portalRetailTrends: CURATED_TREND_TOPICS.portalRetail || [],
           shortFormTrends: CURATED_TREND_TOPICS.shortForm || [],
-          newsletterTrends: CURATED_TREND_TOPICS.newsletter || []
+          newsletterTrends: CURATED_TREND_TOPICS.newsletter || [],
+          brandPromoTrends: CURATED_TREND_TOPICS.brandPromo || []
         };
       }
     }
@@ -1195,6 +1204,8 @@
         ? state.trendRadar.googleTrends
         : state.trendTab === 'portal'
         ? state.trendRadar.portalRetailTrends
+        : state.trendTab === 'brandpromo'
+        ? state.trendRadar.brandPromoTrends || []
         : state.trendRadar.newsletterTrends;
 
     root.innerHTML = `
@@ -1354,18 +1365,28 @@
               <button type="button" class="trend-clean-tab ${state.trendTab === 'google' ? 'active' : ''}" data-trend-tab="google">
                 구글 트렌드 급상승 (${state.trendRadar.googleTrends.length})
               </button>
+              <button type="button" class="trend-clean-tab ${state.trendTab === 'brandpromo' ? 'active' : ''}" data-trend-tab="brandpromo">
+                🎁 브랜드 신상 · 프로모션 뉴스 (${(state.trendRadar.brandPromoTrends || []).length})
+              </button>
             </div>
 
             <div class="trend-clean-grid">
               ${activeTrendList.map((item, idx) => {
-                const matchedTypeId = detectBestContentType(item.keyword, '', item.desc || '', state.trendTab === 'shortform' || state.trendTab === 'newsletter' ? 3 : 4);
-                const matchedCat = recommendMkPickCategory(item.keyword, matchedTypeId, '').recommendedCategory;
+                const matchedTypeId = detectBestContentType(item.keyword, item.company || '', item.desc || '', state.trendTab === 'shortform' || state.trendTab === 'newsletter' ? 3 : 4);
+                const matchedCat = recommendMkPickCategory(item.keyword, matchedTypeId, item.company || '').recommendedCategory;
+                const articleUrl = item.url || `https://news.google.com/search?q=${encodeURIComponent(item.keyword)}&hl=ko&gl=KR&ceid=KR:ko`;
+                const sectorBadge = item.sector || (state.trendTab === 'brandpromo' ? item.badge : '');
                 return `
-                  <div class="trend-clean-row" data-use-trend-kw="${escapeHtml(item.keyword)}" data-use-trend-type="${matchedTypeId}">
+                  <div class="trend-clean-row" data-use-trend-kw="${escapeHtml(item.keyword)}" data-use-trend-comp="${escapeHtml(item.company || '')}" data-use-trend-type="${matchedTypeId}">
                     <div style="min-width: 0; flex: 1;">
                       <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 2px;">
                         <span style="font-size: 12px; font-weight: 800; color: var(--mk-orange); width: 18px;">${idx + 1}</span>
                         <strong style="font-size: 14px; color: var(--text-primary);">${escapeHtml(item.keyword)}</strong>
+                        ${sectorBadge ? `
+                          <span style="font-size: 10.5px; font-weight: 700; color: var(--text-secondary); background-color: var(--bg-subtle); border: var(--border-thin); padding: 1px 6px; border-radius: 4px;">
+                            ${escapeHtml(sectorBadge)}
+                          </span>
+                        ` : ''}
                         <span style="font-size: 11px; font-weight: 700; color: var(--mk-orange); background-color: var(--mk-orange-light); padding: 1px 6px; border-radius: 4px;">
                           유형 0${matchedTypeId} · ${escapeHtml(matchedCat)}
                         </span>
@@ -1374,9 +1395,21 @@
                         ${escapeHtml(item.desc)}
                       </div>
                     </div>
-                    <span style="font-size: 12px; font-weight: 800; color: var(--mk-orange); white-space: nowrap; flex-shrink: 0;">
-                      초안 생성 →
-                    </span>
+                    <div class="flex-row" style="gap: 8px; flex-shrink: 0;">
+                      <a
+                        href="${escapeHtml(articleUrl)}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-trend-ext-link="1"
+                        style="font-size: 11.5px; font-weight: 700; color: var(--text-secondary); background-color: var(--bg-subtle); border: var(--border-thin); padding: 3px 8px; border-radius: 4px; text-decoration: none; white-space: nowrap;"
+                        title="관련 실시간 보도 원문을 새 창에서 확인합니다"
+                      >
+                        원문 기사 ↗
+                      </a>
+                      <span style="font-size: 12px; font-weight: 800; color: var(--mk-orange); white-space: nowrap;">
+                        초안 생성 →
+                      </span>
+                    </div>
                   </div>
                 `;
               }).join('')}
@@ -1584,15 +1617,25 @@
       render(true);
     });
 
+    // 원문 기사 보기 링크 클릭 시 행 전체의 초안 생성 이벤트 전파 방지
+    root.querySelectorAll('[data-trend-ext-link]').forEach(link => {
+      link.addEventListener('click', e => {
+        e.stopPropagation();
+      });
+    });
+
     // 실시간 트렌드 키워드 클릭 시 최적 유형(1~5)으로 즉시 초안 생성
     root.querySelectorAll('[data-use-trend-kw]').forEach(btn => {
       btn.addEventListener('click', () => {
         const kw = btn.getAttribute('data-use-trend-kw');
-        const matchedType = Number(btn.getAttribute('data-use-trend-type')) || detectBestContentType(kw, hi.company, '', 4);
+        const trendComp = (btn.getAttribute('data-use-trend-comp') || '').trim();
+        const finalComp = trendComp || hi.company;
+        const matchedType = Number(btn.getAttribute('data-use-trend-type')) || detectBestContentType(kw, finalComp, '', 4);
         syncHomeInputs();
         hi.keyword = kw;
+        if (trendComp) hi.company = trendComp;
         hi.typeId = matchedType;
-        startWorkWithKeyword(kw, matchedType, hi.company, true);
+        startWorkWithKeyword(kw, matchedType, finalComp, true);
       });
     });
 
@@ -1691,13 +1734,14 @@
     const geoEval = evaluateGeoChecklist(w);
     const isPreview = state.editorViewMode === 'preview';
 
-    // 편집 화면 왼쪽에서도 바로 눌러 쓸 수 있는 인기 트렌드 태그 모음 (8개)
+    // 편집 화면 왼쪽에서도 바로 눌러 쓸 수 있는 인기 트렌드 태그 모음 (10개)
     const quickTrendTags = [
-      ...(state.trendRadar.shortFormTrends || []).slice(0, 3).map(t => t.keyword),
-      ...(state.trendRadar.newsletterTrends || []).slice(0, 3).map(t => t.keyword),
+      ...(state.trendRadar.shortFormTrends || []).slice(0, 2).map(t => t.keyword),
+      ...(state.trendRadar.brandPromoTrends || []).slice(0, 3).map(t => t.keyword),
+      ...(state.trendRadar.newsletterTrends || []).slice(0, 2).map(t => t.keyword),
       ...(state.trendRadar.portalRetailTrends || []).slice(0, 2).map(t => t.keyword),
       ...(state.trendRadar.googleTrends || []).slice(0, 2).map(t => t.keyword)
-    ].filter((v, i, arr) => v && arr.indexOf(v) === i).slice(0, 8);
+    ].filter((v, i, arr) => v && arr.indexOf(v) === i).slice(0, 10);
 
     // 유형별 및 에디터 스토리텔링 단락 역할 안내 라벨 (타임라인 · 개별 주자 스포트라이트 · Bonus Track 자동 인식)
     function getSectionRoleLabel(sec, sIdx, totalLen) {

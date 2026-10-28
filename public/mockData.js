@@ -423,19 +423,31 @@ const GEO_CHECKLIST_ITEMS = [
   }
 ];
 
-// 트렌드 뉴스레터(캐릿·뉴닉·어피티 등) 및 포털 화제 키워드 기본 큐레이션 (10개)
+// 트렌드 뉴스레터(캐릿·뉴닉·어피티 등), 포털 화제 및 전 업종 브랜드 신상품·프로모션 기본 큐레이션 (각 10개)
 const CURATED_TREND_TOPICS = {
   newsletter: [
-    { keyword: '과일모찌 · 떡픈런', category: 'MZ 디저트 트렌드', desc: '전통 간식 찹쌀떡에 제철 과일을 결합해 백화점·골목상권 오픈런을 부른 할매니얼 디저트 열풍' },
-    { keyword: '다이소 뷰티 품절템', category: '초가성비 · 듀프 소비', desc: '제약사·대형 화장품 브랜드까지 3,000~5,000원대 전용 라인업을 출시하며 확산된 가성비 뷰티 트렌드' },
-    { keyword: '텍스트힙 · 민음사빵', category: '출판 · 컬래버 굿즈', desc: '독서를 세련된 취향으로 인증하는 MZ세대 텍스트힙 열풍과 문학 표지 굿즈 수집 현상' },
-    { keyword: '러닝화 계급도 · 러닝크루', category: '스포츠 · 라이프스타일', desc: '2030 러닝 인구 급증으로 품귀 현상을 빚는 러닝화 브랜드 비교와 도심 러닝 문화' },
-    { keyword: '편의점 저당 · 고단백 신상', category: '헬시플레저 · 식품', desc: '맛과 건강 관리를 동시에 챙기는 저당 디저트·단백질 음료 편의점 전용 라인업 경쟁' },
-    { keyword: '요노(YONO) · 실속 웨딩', category: '고물가 소비 심리', desc: '불필요한 패키지 거품을 빼고 필요한 것만 직접 고르는 2026년형 실속 소비 트렌드' },
-    { keyword: '지자체 관광 캐릭터 팝업', category: '로컬 · 굿즈 마케팅', desc: '서울 성수·용산 등 도심 복합몰로 찾아와 캐릭터 키링과 체험존으로 2030을 공략하는 로컬 팝업 열풍' },
-    { keyword: '백화점 반값 · 균일가 편집숍', category: '유통 · 불황형 소비', desc: '고물가 속 주요 백화점과 대형마트가 1만 원 이하 초저가 가전·의류 특화 매장을 확대하는 현상' },
-    { keyword: '가방 꾸미기 · 백꾸 키링', category: '패션 · 커스텀 굿즈', desc: '인형 키링과 미니 파우치를 여러 개 달아 나만의 개성을 표현하는 MZ세대 커스터마이징 유행' },
-    { keyword: '무알코올 · 제로 슈거 주류', category: '주류 · 헬시 트렌드', desc: '취하지 않고 가볍게 분위기만 즐기는 회식·모임 문화 확산과 무알코올·저도주 신제품 인기' }
+    { keyword: '과일모찌 · 떡픈런', category: 'MZ 디저트 트렌드', desc: '전통 간식 찹쌀떡에 제철 과일을 결합해 백화점·골목상권 오픈런을 부른 할매니얼 디저트 열풍입니다.', url: 'https://news.google.com/search?q=%EA%B3%BC%EC%9D%BC%EB%AA%A8%EC%B0%8C+%EC%98%A4%ED%94%88%EB%9F%B0&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: '다이소 뷰티 품절템', category: '초가성비 · 듀프 소비', desc: '제약사·대형 화장품 브랜드까지 3,000~5,000원대 전용 라인업을 출시하며 확산된 가성비 뷰티 트렌드입니다.', url: 'https://news.google.com/search?q=%EB%8B%A4%EC%9D%B4%EC%86%8C+%EB%B7%B0%ED%8B%B0+%ED%92%88%EC%A0%88%ED%85%9C&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: '텍스트힙 · 민음사빵', category: '출판 · 컬래버 굿즈', desc: '독서를 세련된 취향으로 인증하는 MZ세대 텍스트힙 열풍과 문학 표지 굿즈 수집 현상입니다.', url: 'https://news.google.com/search?q=%ED%85%8D%EC%8A%A4%ED%8A%B8%ED%9E%99+%EB%AF%BC%EC%9D%8C%EC%82%AC&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: '러닝화 계급도 · 러닝크루', category: '스포츠 · 라이프스타일', desc: '2030 러닝 인구 급증으로 품귀 현상을 빚는 러닝화 브랜드 비교와 도심 러닝 문화입니다.', url: 'https://news.google.com/search?q=%EB%9F%AC%EB%8B%9D%ED%99%94+%EB%9F%AC%EB%8B%9D%ED%81%AC%EB%A3%A8&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: '편의점 저당 · 고단백 신상', category: '헬시플레저 · 식품', desc: '맛과 건강 관리를 동시에 챙기는 저당 디저트·단백질 음료 편의점 전용 라인업 경쟁입니다.', url: 'https://news.google.com/search?q=%ED%8E%B8%EC%9D%98%EC%A0%90+%EC%A0%80%EB%8B%B9+%EA%B3%A0%EB%8B%A8%EB%B0%B1+%EC%8B%A0%EC%83%81&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: '요노(YONO) · 실속 웨딩', category: '고물가 소비 심리', desc: '불필요한 패키지 거품을 빼고 필요한 것만 직접 고르는 2026년형 실속 소비 트렌드입니다.', url: 'https://news.google.com/search?q=%EC%9A%94%EB%85%B8+%EC%8B%A4%EC%86%8D+%EC%9B%A8%EB%94%A9&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: '지자체 관광 캐릭터 팝업', category: '로컬 · 굿즈 마케팅', desc: '서울 성수·용산 등 도심 복합몰로 찾아와 캐릭터 키링과 체험존으로 2030을 공략하는 로컬 팝업 열풍입니다.', url: 'https://news.google.com/search?q=%EC%A7%80%EC%9E%90%EC%B2%B4+%EC%BA%90%EB%A6%AD%ED%84%B0+%ED%8C%9D%EC%97%85%EC%8A%A4%ED%86%A0%EC%96%B4&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: '백화점 반값 · 균일가 편집숍', category: '유통 · 불황형 소비', desc: '고물가 속 주요 백화점과 대형마트가 1만 원 이하 초저가 가전·의류 특화 매장을 확대하는 현상입니다.', url: 'https://news.google.com/search?q=%EA%B7%A0%EC%9D%BC%EA%B0%80+%EC%B4%88%EC%A0%80%EA%B0%80+%ED%8A%B9%ED%99%94%EB%A7%A4%EC%9E%A5&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: '가방 꾸미기 · 백꾸 키링', category: '패션 · 커스텀 굿즈', desc: '인형 키링과 미니 파우치를 여러 개 달아 나만의 개성을 표현하는 MZ세대 커스터마이징 유행입니다.', url: 'https://news.google.com/search?q=%EB%B0%B1%EA%BE%B8+%ED%82%A4%EB%A7%81+%EC%9C%A0%ED%96%89&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: '무알코올 · 제로 슈거 주류', category: '주류 · 헬시 트렌드', desc: '취하지 않고 가볍게 분위기만 즐기는 회식·모임 문화 확산과 무알코올·저도주 신제품 인기입니다.', url: 'https://news.google.com/search?q=%EB%AC%B4%EC%95%8C%EC%BD%94%EC%98%AC+%EC%A0%9C%EB%A1%9C%EC%8A%88%EA%B1%B0+%EC%A3%BC%EB%A5%98&hl=ko&gl=KR&ceid=KR:ko' }
+  ],
+  brandPromo: [
+    { keyword: '스타벅스 코리아 시즌 한정 음료·굿즈 프로모션', company: '스타벅스 코리아', sector: '식음료·외식', badge: '식음료·외식 · 신메뉴·굿즈', desc: '스타벅스 코리아가 제철 원료를 활용한 시즌 한정 음료와 실용적인 MD 굿즈 라인업 및 별 적립 프로모션을 선보였습니다.', url: 'https://news.google.com/search?q=%EC%8A%A4%ED%83%80%EB%B2%85%EC%8A%A4+%EC%8B%A0%EB%A9%94%EB%89%B4+%ED%94%84%EB%A1%9C%EB%AA%A8%EC%85%98&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: '올리브영 온·오프라인 뷰티 신상 기획전', company: 'CJ올리브영', sector: '뷰티·패션', badge: '뷰티·패션 · 단독 기획전', desc: 'CJ올리브영이 국내 인디 뷰티 및 더마 코스메틱 신제품 단독 기획전과 오늘드림 특가 프로모션을 진행합니다.', url: 'https://news.google.com/search?q=%EC%98%AC%EB%A6%AC%EB%B8%8C%EC%98%81+%EC%8B%A0%EC%83%81+%ED%94%84%EB%A1%9C%EB%AA%A8%EC%85%98&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: '삼성전자 AI 가전 구독 · 보상판매 프로모션', company: '삼성전자', sector: '가전·IT', badge: '가전·IT · 신제품·프로모션', desc: '삼성전자가 비스포크 AI 신제품 라인업 확대와 함께 AI 가전 구독 케어 및 구형 가전 보상판매 혜택 프로모션을 강화합니다.', url: 'https://news.google.com/search?q=%EC%82%BC%EC%84%B1%EC%A0%84%EC%9E%90+AI+%EA%B0%80%EC%A0%84+%ED%94%84%EB%A1%9C%EB%AA%A8%EC%85%98&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: 'CU · GS25 스타 셰프 협업 간편식 신상품 출시', company: 'CU·GS25', sector: '식음료·외식', badge: '식음료·외식 · 콜라보 신상', desc: '주요 편의점 업계가 유명 셰프 및 인기 외식 브랜드와 협업한 프리미엄 RMR 간편식·디저트 신상품과 앱 예약 할인 행사를 선보였습니다.', url: 'https://news.google.com/search?q=%ED%8E%B8%EC%9D%98%EC%A0%90+%EC%85%B0%ED%94%84+%EC%8B%A0%EC%83%81%ED%92%88+%EC%B6%9C%EC%8B%9C&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: '무신사 · 29CM 시즌 아우터 신상 쇼케이스 특가', company: '무신사', sector: '뷰티·패션', badge: '뷰티·패션 · 신상 쇼케이스', desc: '무신사와 29CM가 디자이너 패션 브랜드의 시즌 단독 아우터·니트 신상 선발매 쇼케이스와 쿠폰팩 프로모션을 진행합니다.', url: 'https://news.google.com/search?q=%EB%AC%B4%EC%8B%A0%EC%82%AC+%EC%8B%A0%EC%83%81+%ED%94%84%EB%A1%9C%EB%AA%A8%EC%85%98&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: '오늘의집 라이프스타일 · 침구·가구 리빙 페어', company: '오늘의집', sector: '유통·리빙', badge: '유통·리빙 · 리빙 기획전', desc: '라이프스타일 플랫폼 오늘의집이 계절 변화에 맞춘 침구·조명·수납 가구 신상품 출시 및 브랜드 위크 특가전을 실시합니다.', url: 'https://news.google.com/search?q=%EC%98%A4%EB%8A%98%EC%9D%98%EC%A7%91+%ED%8A%B9%EA%B0%80+%ED%94%84%EB%A1%9C%EB%AA%A8%EC%85%98&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: '아모레퍼시픽 · LG생활건강 고기능성 앰플 신제품', company: '아모레퍼시픽·LG생활건강', sector: '뷰티·패션', badge: '뷰티·패션 · 신제품 출시', desc: '주요 뷰티 기업들이 슬로에이징·피부 장벽 케어 성분을 강화한 고기능성 스킨케어 신제품과 체험 키트 증정 프로모션을 선보였습니다.', url: 'https://news.google.com/search?q=%EC%95%84%EB%AA%A8%EB%A0%88%ED%8D%BC%EC%8B%9C%ED%94%BD+%EC%8B%A0%EC%A0%9C%ED%92%88+%EC%B6%9C%EC%8B%9C&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: '이마트 · 롯데마트 초저가 PB 및 제철 신선식품 할인전', company: '이마트·롯데마트', sector: '유통·리빙', badge: '유통·리빙 · 장바구니 프로모션', desc: '대형마트 업계가 고물가 장바구니 부담을 낮추기 위해 초가성비 PB 신상품을 출시하고 주말 반값 할인 프로모션을 전개합니다.', url: 'https://news.google.com/search?q=%EB%8C%80%ED%98%95%EB%A7%88%ED%8A%B8+%EC%8B%A0%EC%83%81%ED%92%88+%ED%95%A0%EC%9D%B8+%ED%94%84%EB%A1%9C%EB%AA%A8%EC%85%98&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: 'LG전자 스탠바이미 · 워시콤보 라이프스타일 체험 이벤트', company: 'LG전자', sector: '가전·IT', badge: '가전·IT · 신가전·이벤트', desc: 'LG전자가 공간 인테리어 가전 및 일체형 세탁건조기 신모델 체험단 모집과 캐시백·사은품 프로모션을 진행합니다.', url: 'https://news.google.com/search?q=LG%EC%A0%84%EC%9E%90+%EA%B0%80%EC%A0%84+%EC%8B%A0%EC%A0%9C%ED%92%88+%ED%94%84%EB%A1%9C%EB%AA%A8%EC%85%98&hl=ko&gl=KR&ceid=KR:ko' },
+    { keyword: '투썸플레이스 · 메가MGC커피 캐릭터 콜라보 디저트·굿즈', company: '투썸플레이스·메가MGC커피', sector: '식음료·외식', badge: '식음료·외식 · IP 콜라보 신상', desc: '프랜차이즈 카페 브랜드들이 인기 캐릭터 IP와 협업한 시즌 한정 홀케이크·음료 신메뉴와 한정판 키링·텀블러 프로모션을 출시했습니다.', url: 'https://news.google.com/search?q=%EC%B9%B4%ED%8E%98+%EC%BA%90%EB%A6%AD%ED%84%B0+%EC%BD%9C%EB%9D%BC%EB%B3%B4+%EC%8B%A0%EB%A9%94%EB%89%B4&hl=ko&gl=KR&ceid=KR:ko' }
   ]
 };
 
