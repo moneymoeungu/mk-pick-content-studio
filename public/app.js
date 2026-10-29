@@ -49,6 +49,10 @@
     leftPanelTab: 'memo', // 'memo' | 'check' | 'outline'
     editorViewMode: 'edit', // 'edit' | 'preview'
     isSearchingNews: false,
+    generatingKeyword: '',
+    generatingTypeName: '',
+    draftElapsedSec: 0,
+    lastDraftDurationSec: null,
     lastHighlightedElementId: null
   };
 
@@ -1314,15 +1318,145 @@
       const newLeftPanel = document.querySelector('.left-panel-sticky');
       if (newLeftPanel) newLeftPanel.scrollTop = prevLeftScroll;
     }
+    syncDraftFloatingBannerDOM();
+  }
+
+  let draftTimerId = null;
+  const ESTIMATED_DRAFT_TOTAL_SEC = 15;
+
+  function formatDraftRemainingInfo(elapsedSec) {
+    const remain = Math.max(0, Math.ceil(ESTIMATED_DRAFT_TOTAL_SEC - elapsedSec));
+    const pct = elapsedSec < ESTIMATED_DRAFT_TOTAL_SEC
+      ? Math.min(92, Math.round((elapsedSec / ESTIMATED_DRAFT_TOTAL_SEC) * 90) + 5)
+      : Math.min(98, 92 + Math.floor((elapsedSec - ESTIMATED_DRAFT_TOTAL_SEC) / 2));
+
+    let stageText = '1/3단계 · 실시간 뉴스·유튜브 쇼츠 팩트 및 원문 출처 수집 중...';
+    if (elapsedSec >= 3.0 && elapsedSec < 9.5) {
+      stageText = '2/3단계 · Gemini-4-Argon 엔진이 매경 경어체 본문 3~4단락을 집필하고 있습니다...';
+    } else if (elapsedSec >= 9.5) {
+      stageText = '3/3단계 · 5열 비교 요약표 · 핵심 용어사전 · FAQ 3선 및 팩트체크 구성 중...';
+    }
+
+    const timeBadgeText = remain > 0
+      ? `${elapsedSec.toFixed(1)}초 경과 · 완료까지 약 ${remain}초 남음`
+      : `${elapsedSec.toFixed(1)}초 경과 · 마무리 정리 중 (곧 완료됩니다)`;
+
+    const shortBtnText = remain > 0
+      ? `⏳ 생성 중 (${elapsedSec.toFixed(1)}초 / 약 ${remain}초 남음)`
+      : `⏳ 마무리 중 (${elapsedSec.toFixed(1)}초 경과)`;
+
+    return { remain, pct, stageText, timeBadgeText, shortBtnText };
+  }
+
+  function syncDraftFloatingBannerDOM() {
+    let banner = document.getElementById('draftGeneratingFloatingBanner');
+    if (!state.isSearchingNews && !state.isRefreshingInEditor) {
+      if (banner) banner.remove();
+      return;
+    }
+
+    const kw = state.generatingKeyword || state.homeInput.keyword || state.currentWork?.keyword || '선택 키워드';
+    const tName = state.generatingTypeName || CONTENT_TYPES[state.homeInput.typeId]?.shortName || '맞춤 유형';
+    const info = formatDraftRemainingInfo(state.draftElapsedSec || 0);
+
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'draftGeneratingFloatingBanner';
+      banner.style.cssText = [
+        'position: fixed',
+        'bottom: 24px',
+        'left: 50%',
+        'transform: translateX(-50%)',
+        'z-index: 9500',
+        'width: min(600px, calc(100vw - 28px))',
+        'background-color: #FFFFFF',
+        'border: 2px solid var(--mk-orange)',
+        'border-radius: 12px',
+        'box-shadow: 0 14px 36px rgba(17, 17, 17, 0.22)',
+        'padding: 16px 20px',
+        'font-family: inherit'
+      ].join('; ');
+      document.body.appendChild(banner);
+    }
+
+    banner.innerHTML = `
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;">
+        <div style="font-size: 14px; font-weight: 800; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+          <span style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background-color: var(--mk-orange);"></span>
+          <span>'${escapeHtml(kw)}'</span>
+          <span style="font-size: 11.5px; font-weight: 700; color: var(--mk-orange); background-color: var(--mk-orange-light); padding: 2px 7px; border-radius: 4px;">
+            ${escapeHtml(tName)}
+          </span>
+          <span>맞춤 초안 생성 중</span>
+        </div>
+        <span id="draftFloatingTimerBadge" style="font-size: 12.5px; font-weight: 800; color: var(--mk-orange); background-color: var(--mk-orange-light); padding: 3px 10px; border-radius: 99px;">
+          ⏱ ${escapeHtml(info.timeBadgeText)}
+        </span>
+      </div>
+      <div style="width: 100%; height: 7px; background-color: #F1F1EE; border-radius: 99px; overflow: hidden; margin-bottom: 8px;">
+        <div id="draftFloatingProgressBar" style="width: ${info.pct}%; height: 100%; background: linear-gradient(90deg, #F37021 0%, #FF9248 100%); border-radius: 99px; transition: width 0.25s ease;"></div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-secondary);">
+        <span id="draftFloatingStageText" style="font-weight: 600;">${escapeHtml(info.stageText)}</span>
+        <span style="font-size: 11.5px; color: var(--text-muted); white-space: nowrap;">완성 즉시 편집 화면으로 이동합니다</span>
+      </div>
+    `;
+  }
+
+  function startDraftProgressTimer(keyword, typeName) {
+    state.generatingKeyword = keyword;
+    state.generatingTypeName = typeName;
+    state.draftElapsedSec = 0;
+    const startTs = Date.now();
+
+    if (draftTimerId) clearInterval(draftTimerId);
+    syncDraftFloatingBannerDOM();
+
+    draftTimerId = setInterval(() => {
+      state.draftElapsedSec = Number(((Date.now() - startTs) / 1000).toFixed(1));
+      const info = formatDraftRemainingInfo(state.draftElapsedSec);
+
+      const timerBadgeEl = document.getElementById('draftFloatingTimerBadge');
+      if (timerBadgeEl) timerBadgeEl.textContent = `⏱ ${info.timeBadgeText}`;
+
+      const barEl = document.getElementById('draftFloatingProgressBar');
+      if (barEl) barEl.style.width = `${info.pct}%`;
+
+      const stageEl = document.getElementById('draftFloatingStageText');
+      if (stageEl) stageEl.textContent = info.stageText;
+
+      const step1Btn = document.getElementById('homeStartDynamicBtn');
+      if (step1Btn && state.isSearchingNews) {
+        step1Btn.textContent = info.shortBtnText;
+      }
+
+      document.querySelectorAll('[data-active-generating-badge="1"]').forEach(el => {
+        el.textContent = info.shortBtnText;
+      });
+    }, 200);
+
+    return () => {
+      if (draftTimerId) {
+        clearInterval(draftTimerId);
+        draftTimerId = null;
+      }
+      const totalSec = Number(((Date.now() - startTs) / 1000).toFixed(1));
+      state.lastDraftDurationSec = totalSec;
+      state.generatingKeyword = '';
+      state.generatingTypeName = '';
+      syncDraftFloatingBannerDOM();
+      return totalSec;
+    };
   }
 
   // 트렌드 키워드 또는 직접 입력으로 바로 기사 초안 생성하는 공통 함수
   async function startWorkWithKeyword(keyword, typeId = 4, company = '', autoMatchType = false) {
+    if (state.isSearchingNews) return;
     const matchedType = autoMatchType ? detectBestContentType(keyword, company, state.homeInput.rawText, typeId) : typeId;
     const tName = CONTENT_TYPES[matchedType]?.shortName || '맞춤 유형';
     state.homeInput.typeId = matchedType;
     state.isSearchingNews = true;
-    showToast(`'${keyword}' 키워드를 [${tName}]에 매칭하여 최신 팩트 기반 초안을 작성합니다...`);
+    const stopTimer = startDraftProgressTimer(keyword, tName);
     render(true);
     try {
       const res = await apiFetch('/api/works', {
@@ -1339,6 +1473,7 @@
       });
       await loadConfig();
       state.isSearchingNews = false;
+      const elapsed = stopTimer();
       state.currentWork = res.work;
       state.works.unshift(res.work);
       try {
@@ -1347,7 +1482,7 @@
       state.screen = 'editor';
       const finalTypeName = CONTENT_TYPES[res.work.typeId]?.shortName || tName;
       const finalCat = res.work.summaryBlocks?.mkCategory || '산업 Q&A';
-      showToast(`✓ [${finalTypeName} · ${finalCat}] '${keyword}' 맞춤 초안이 완성되었습니다!`);
+      showToast(`✓ [${finalTypeName} · ${finalCat}] '${keyword}' 맞춤 초안이 완성되었습니다! (${elapsed}초 소요)`);
       render(false);
     } catch (err) {
       // GitHub Pages 등 정적 호스팅 환경: 브라우저에서 Perplexity API를 직접 호출해 실시간 초안 생성
@@ -1375,6 +1510,7 @@
         }
       }
       state.isSearchingNews = false;
+      const elapsed = stopTimer();
       const fallbackWork = createWorkObject
         ? createWorkObject({
             typeId: matchedType,
@@ -1405,7 +1541,7 @@
       } catch (e) {}
       state.screen = 'editor';
       const finalCat = fallbackWork.summaryBlocks?.mkCategory || '산업 Q&A';
-      showToast(`✓ [${tName} · ${finalCat}] '${keyword}' 맞춤 초안이 완성되었습니다!`);
+      showToast(`✓ [${tName} · ${finalCat}] '${keyword}' 맞춤 초안이 완성되었습니다! (${elapsed}초 소요)`);
       render(false);
     }
   }
@@ -1463,7 +1599,7 @@
           </div>
           <div>
             <button class="btn btn-primary btn-lg" id="homeStartDynamicBtn" style="height: 44px; padding: 0 24px; font-size: 14.5px; font-weight: 800;" ${state.isSearchingNews ? 'disabled' : ''}>
-              ${state.isSearchingNews ? '팩트 수집 및 작성 중...' : '✨ 초안 만들기 →'}
+              ${state.isSearchingNews ? formatDraftRemainingInfo(state.draftElapsedSec || 0).shortBtnText : '✨ 초안 만들기 →'}
             </button>
           </div>
         </div>
@@ -1627,13 +1763,17 @@
                     ? `${shortSource} 원문 ↗`
                     : '원문 기사 ↗';
                 const linkTooltip = [cleanSource, item.pubDateShort, '실제 원문 새 창 열기'].filter(Boolean).join(' · ');
+                const isThisRowGenerating = state.isSearchingNews && state.generatingKeyword === item.keyword;
+                const rowGenStyle = isThisRowGenerating
+                  ? 'border-color: var(--mk-orange); background-color: var(--mk-orange-light); box-shadow: 0 0 0 2px rgba(243, 112, 33, 0.16);'
+                  : '';
                 return `
-                  <div class="trend-clean-row" data-use-trend-kw="${escapeHtml(item.keyword)}" data-use-trend-comp="${escapeHtml(item.company || '')}" data-use-trend-type="${matchedTypeId}">
+                  <div class="trend-clean-row" style="${rowGenStyle}" data-use-trend-kw="${escapeHtml(item.keyword)}" data-use-trend-comp="${escapeHtml(item.company || '')}" data-use-trend-type="${matchedTypeId}">
                     <div style="min-width: 0; flex: 1;">
                       <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 2px;">
                         <span style="font-size: 12px; font-weight: 800; color: var(--mk-orange); width: 18px;">${idx + 1}</span>
                         <strong style="font-size: 14px; color: var(--text-primary);">${escapeHtml(item.keyword)}</strong>
-                        <span style="font-size: 11px; font-weight: 700; color: var(--mk-orange); background-color: var(--mk-orange-light); padding: 1px 6px; border-radius: 4px;">
+                        <span style="font-size: 11px; font-weight: 700; color: var(--mk-orange); background-color: ${isThisRowGenerating ? '#FFFFFF' : 'var(--mk-orange-light)'}; padding: 1px 6px; border-radius: 4px;">
                           유형 0${matchedTypeId} · ${escapeHtml(matchedCat)}
                         </span>
                       </div>
@@ -1652,8 +1792,8 @@
                       >
                         ${escapeHtml(linkLabel)}
                       </a>
-                      <span style="font-size: 12px; font-weight: 800; color: var(--mk-orange); white-space: nowrap;">
-                        초안 생성 →
+                      <span ${isThisRowGenerating ? 'data-active-generating-badge="1"' : ''} style="font-size: 12px; font-weight: 800; color: var(--mk-orange); white-space: nowrap; ${isThisRowGenerating ? 'background-color: #FFFFFF; padding: 3px 9px; border-radius: 99px; border: 1px solid var(--mk-orange);' : ''}">
+                        ${isThisRowGenerating ? escapeHtml(formatDraftRemainingInfo(state.draftElapsedSec || 0).shortBtnText) : '초안 생성 →'}
                       </span>
                     </div>
                   </div>
@@ -1715,25 +1855,31 @@
             ` : ''}
 
             <div class="trend-clean-grid">
-              ${(calData.events || []).map(ev => `
-                <div class="trend-clean-row" data-use-cal-kw="${escapeHtml(ev.keyword)}" data-use-cal-type="${ev.typeId}">
-                  <div style="min-width: 0; flex: 1;">
-                    <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 3px;">
-                      <span style="font-size: 12px; font-weight: 800; color: var(--mk-orange);">${escapeHtml(ev.date)}</span>
-                      <strong style="font-size: 14px; color: var(--text-primary);">${escapeHtml(ev.name)}</strong>
-                      <span style="font-size: 11px; font-weight: 700; color: var(--mk-orange); background-color: var(--mk-orange-light); padding: 1px 6px; border-radius: 4px;">
-                        유형 0${ev.typeId} · ${escapeHtml(ev.category)}
-                      </span>
+              ${(calData.events || []).map(ev => {
+                const isThisCalGenerating = state.isSearchingNews && state.generatingKeyword === ev.keyword;
+                const calGenStyle = isThisCalGenerating
+                  ? 'border-color: var(--mk-orange); background-color: var(--mk-orange-light); box-shadow: 0 0 0 2px rgba(243, 112, 33, 0.16);'
+                  : '';
+                return `
+                  <div class="trend-clean-row" style="${calGenStyle}" data-use-cal-kw="${escapeHtml(ev.keyword)}" data-use-cal-type="${ev.typeId}">
+                    <div style="min-width: 0; flex: 1;">
+                      <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 3px;">
+                        <span style="font-size: 12px; font-weight: 800; color: var(--mk-orange);">${escapeHtml(ev.date)}</span>
+                        <strong style="font-size: 14px; color: var(--text-primary);">${escapeHtml(ev.name)}</strong>
+                        <span style="font-size: 11px; font-weight: 700; color: var(--mk-orange); background-color: ${isThisCalGenerating ? '#FFFFFF' : 'var(--mk-orange-light)'}; padding: 1px 6px; border-radius: 4px;">
+                          유형 0${ev.typeId} · ${escapeHtml(ev.category)}
+                        </span>
+                      </div>
+                      <div style="font-size: 12.5px; color: var(--text-secondary);">
+                        ${escapeHtml(ev.desc)}
+                      </div>
                     </div>
-                    <div style="font-size: 12.5px; color: var(--text-secondary);">
-                      ${escapeHtml(ev.desc)}
-                    </div>
+                    <span ${isThisCalGenerating ? 'data-active-generating-badge="1"' : ''} style="font-size: 12px; font-weight: 800; color: var(--mk-orange); white-space: nowrap; flex-shrink: 0; ${isThisCalGenerating ? 'background-color: #FFFFFF; padding: 3px 9px; border-radius: 99px; border: 1px solid var(--mk-orange);' : ''}">
+                      ${isThisCalGenerating ? escapeHtml(formatDraftRemainingInfo(state.draftElapsedSec || 0).shortBtnText) : '초안 생성 →'}
+                    </span>
                   </div>
-                  <span style="font-size: 12px; font-weight: 800; color: var(--mk-orange); white-space: nowrap; flex-shrink: 0;">
-                    초안 생성 →
-                  </span>
-                </div>
-              `).join('')}
+                `;
+              }).join('')}
             </div>
 
             ${state.showExternalCalendarEmbed ? `
@@ -2978,12 +3124,9 @@
       }
       const shouldAutoMatch = rebuildDraft && !keepCurrentType;
       const nextTypeId = shouldAutoMatch ? detectBestContentType(kw, comp, '', w.typeId) : w.typeId;
+      const nextTypeName = CONTENT_TYPES[nextTypeId]?.shortName || '맞춤 유형';
       state.isRefreshingInEditor = true;
-      showToast(
-        rebuildDraft
-          ? `⏳ '${kw}' 키워드로 오른쪽 기사 전체를 새로 작성하고 있습니다...`
-          : `⏳ '${kw}' 관련 최신 뉴스 문장을 취재 메모장에 추가로 불러오고 있습니다...`
-      );
+      const stopEditorTimer = startDraftProgressTimer(kw, nextTypeName);
       render(true);
       try {
         const res = await apiFetch(`/api/works/${w.id}/refresh-news`, {
@@ -2999,6 +3142,7 @@
           })
         });
         state.isRefreshingInEditor = false;
+        const elapsed = stopEditorTimer();
         state.currentWork = res.work;
         const idx = state.works.findIndex(item => item.id === w.id);
         if (idx !== -1) state.works[idx] = res.work;
@@ -3007,8 +3151,8 @@
         await loadConfig();
         showToast(
           rebuildDraft
-            ? `✓ '${kw}' 최신 팩트 ${res.liveNewsCount || ''}건을 바탕으로 오른쪽 기사 전체를 새로 작성했습니다!`
-            : `✓ '${kw}' 최신 뉴스 문장 ${res.liveNewsCount || ''}건을 매경 문체로 다듬어 취재 메모장에 추가했습니다!`
+            ? `✓ '${kw}' 최신 팩트 ${res.liveNewsCount || ''}건을 바탕으로 오른쪽 기사 전체를 새로 작성했습니다! (${elapsed}초 소요)`
+            : `✓ '${kw}' 최신 뉴스 문장 ${res.liveNewsCount || ''}건을 매경 문체로 다듬어 취재 메모장에 추가했습니다! (${elapsed}초 소요)`
         );
         render(true);
       } catch (err) {
@@ -3053,15 +3197,17 @@
             w.researchItems = [...(baseScen.researchItems || []), ...(w.researchItems || [])];
           }
           state.isRefreshingInEditor = false;
+          const elapsed = stopEditorTimer();
           saveCurrentWork(true);
           showToast(
             rebuildDraft
-              ? `✓ '${kw}' 키워드로 오른쪽 기사 전체를 새로 작성했습니다!`
-              : `✓ '${kw}' 최신 팩트를 취재 메모장에 추가했습니다!`
+              ? `✓ '${kw}' 키워드로 오른쪽 기사 전체를 새로 작성했습니다! (${elapsed}초 소요)`
+              : `✓ '${kw}' 최신 팩트를 취재 메모장에 추가했습니다! (${elapsed}초 소요)`
           );
           render(true);
         } catch (fallbackErr) {
           state.isRefreshingInEditor = false;
+          stopEditorTimer();
           showToast(err.message);
           render(true);
         }
