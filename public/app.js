@@ -12,11 +12,12 @@
     isVirtualIdolQuery,
     getVirtualIdolScenario,
     buildPresetScenario,
-    buildDynamicScenario,
+    buildDynamicWorkFromNews,
     createWorkObject,
     getInitialWorks,
     extractFactSentencesFromSections
   } = window.MK_MOCK_DATA;
+  const buildDynamicScenario = window.MK_MOCK_DATA.buildDynamicScenario || buildDynamicWorkFromNews;
 
   const state = {
     screen: 'home', // 'home' | 'editor'
@@ -358,7 +359,10 @@
    - 키워드가 역사/변천사/계보를 직접 묻는 주제가 아니라면, 절대로 "1990년대/2000년대/2010년대/2020년대" 같은 억지 연도별 타임라인이나 "탄생 배경과 이유 :", "활동 방식의 한계 :", "Bonus Track :" 같은 고정 라벨을 기계적으로 붙이지 마세요.
 2) 복수 키워드·아이템 맞춤형 전개:
    - 사용자가 쉼표(,)로 여러 키워드(예: 대왕패치, 환절기, 기초템 등)를 입력한 경우, 1단락에서 전체 주제를 아우르는 트렌드 배경·소비자 고민을 짚어주고, 이어지는 단락들에서 각 키워드·아이템별 핵심 특징, 인기 이유, 주요 브랜드/제품 사례를 하나씩 명확하고 실용적인 소제목으로 풀어내세요. 마지막 단락에서는 올바른 선택 기준이나 활용 팁을 제시하세요.
-3) 5열 비교 요약표(summaryTable), 핵심 용어 사전(glossary 5개), FAQ ${faqCount}문항, 마무리 총평 문단(closingParagraph) + 한 줄 요약(oneLineSummary)을 포함한 순수 JSON 객체만 출력하세요.`;
+3) 5열 비교 요약표(summaryTable), 핵심 용어 사전(glossary 5개), FAQ ${faqCount}문항, 팬아웃(Query Fan-out) 연관 추천 질문(fanoutQuestions 6개), 마무리 총평 문단(closingParagraph) + 한 줄 요약(oneLineSummary)을 포함한 순수 JSON 객체만 출력하세요.
+4) 팬아웃 추천 질문(fanoutQuestions) 작성 시 절대 주의:
+   - 반드시 현재 키워드('${keyword}'${company ? `, '${company}'` : ''})의 실제 품목·서비스·특징(예: 식음료·신메뉴면 맛·토핑·가격·칼로리·판매매장·배달여부·꿀조합, 화장품이면 성분·피부타입·사용순서·용량 등)에 100% 맞춘 구체적인 심화 질문 6개를 작성하세요.
+   - 주제와 무관한 엉뚱한 키워드(예: 다이소 뷰티, 팝업 주차 할인, 사전 예약 등)를 절대 섞지 마세요.`;
 
     const usr = `[작성 요청 정보]
 - 키워드/주제: ${keyword}
@@ -417,6 +421,14 @@
   ],
   "faqs": [
     {"q": "Q1. 실제 독자가 검색창에 물어볼 법한 구어체 자연어 질문", "a": "구체적인 수치·장소·조건이 담긴 2~3문장 완결형 답변 (~합니다 체)"}
+  ],
+  "fanoutQuestions": [
+    {"category": "핵심특징·비교", "q": "'${keyword}'에 대해 독자가 추가로 가장 궁금해할 구체적인 꼬리 질문 1 (~나요?)", "a": "구체적인 팩트 기반 답변 1~2문장 (~합니다 체)"},
+    {"category": "가격·구성", "q": "'${keyword}' 가격·용량·구성에 관한 구체적인 꼬리 질문 2 (~나요?)", "a": "구체적인 팩트 기반 답변 1~2문장 (~합니다 체)"},
+    {"category": "이용·구매처", "q": "'${keyword}' 구매 채널·매장·배달·온라인 이용에 관한 꼬리 질문 3 (~나요?)", "a": "구체적인 팩트 기반 답변 1~2문장 (~합니다 체)"},
+    {"category": "추천조합·활용팁", "q": "'${keyword}'을 더 맛있게/효과적으로 즐기는 조합이나 활용 팁 질문 4 (~나요?)", "a": "구체적인 팩트 기반 답변 1~2문장 (~합니다 체)"},
+    {"category": "성분·스펙·보관", "q": "'${keyword}' 원재료·성분·칼로리·보관법 등에 관한 꼬리 질문 5 (~나요?)", "a": "구체적인 팩트 기반 답변 1~2문장 (~합니다 체)"},
+    {"category": "이벤트·프로모션", "q": "'${keyword}' 출시 기념 혜택·할인·한정 여부에 관한 꼬리 질문 6 (~나요?)", "a": "구체적인 팩트 기반 답변 1~2문장 (~합니다 체)"}
   ],
   "closingParagraph": "기사 전체 핵심 메시지를 종합하며 독자에게 실질적인 통찰과 여운을 남기는 마무리 총평 2~3문장 (~합니다 체)",
   "oneLineSummary": "한 줄 요약! “핵심 통찰 인용구” 독자가 꼭 기억해야 할 핵심 메시지입니다."
@@ -485,11 +497,21 @@
           }))
         : (baseScenario.summaryBlocks.glossary || []),
       faqs: Array.isArray(parsed.faqs) && parsed.faqs.length > 0
-        ? parsed.faqs.map(f => ({
-            q: normalizeNewlines(f.q || '').trim(),
+        ? parsed.faqs.map((f, i) => ({
+            q: /^Q\d+\./i.test(normalizeNewlines(f.q || '').trim())
+              ? normalizeNewlines(f.q || '').trim()
+              : `Q${i + 1}. ${normalizeNewlines(f.q || '').trim()}`,
             a: normalizeNewlines(f.a || '').trim()
           }))
         : baseScenario.summaryBlocks.faqs,
+      fanoutQuestions: Array.isArray(parsed.fanoutQuestions) && parsed.fanoutQuestions.length > 0
+        ? parsed.fanoutQuestions.map((fq, i) => ({
+            id: `fq-pplx-${i + 1}`,
+            category: normalizeNewlines(fq.category || '연관 질문').trim(),
+            q: normalizeNewlines(fq.q || '').replace(/^Q\d*[\.\:]\s*/i, '').trim(),
+            a: normalizeNewlines(fq.a || '').trim()
+          })).filter(fq => fq.q && fq.a)
+        : baseScenario.summaryBlocks.fanoutQuestions,
       closingParagraph: normalizeNewlines(parsed.closingParagraph || baseScenario.summaryBlocks.closingParagraph || '').trim(),
       oneLineSummary: normalizeNewlines(parsed.oneLineSummary || baseScenario.summaryBlocks.oneLineSummary).trim()
     };
@@ -1491,6 +1513,7 @@
         company,
         url: state.homeInput.url || '',
         rawText: state.homeInput.rawText || '',
+        typeId: matchedType,
         selectedType: matchedType
       });
       const clientKey = getClientPerplexityKey();
@@ -2127,6 +2150,14 @@
 
     const tInfo = CONTENT_TYPES[w.typeId] || CONTENT_TYPES[2];
     const sb = w.summaryBlocks || {};
+    if (
+      Array.isArray(sb.fanoutQuestions) &&
+      sb.fanoutQuestions.some(fq => (fq.q || '').includes('편의점 전용 맛 · 다이소 뷰티') || ((fq.q || '').includes('사전 예약을 안 하고 바로 가도') && !/(?:팝업|전시|박람회|성수|한남|더현대|방문)/.test(w.keyword || ''))) &&
+      !(w.keyword || '').includes('다이소 뷰티') &&
+      window.MK_MOCK_DATA.buildContextualFanoutQuestions
+    ) {
+      sb.fanoutQuestions = window.MK_MOCK_DATA.buildContextualFanoutQuestions(w.keyword, w.inputCompany, w.typeId);
+    }
     const fullText = buildPlainTextArticle(w);
     const unverifiedCount = (w.factChecks || []).filter(f => f.status === '미처리').length;
     const geoEval = evaluateGeoChecklist(w);
@@ -3163,6 +3194,7 @@
             company: comp,
             url: w.inputUrl || '',
             rawText: w.inputRawText || '',
+            typeId: nextTypeId,
             selectedType: nextTypeId
           });
           const clientKey = getClientPerplexityKey();
