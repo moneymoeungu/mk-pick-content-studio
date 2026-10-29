@@ -88,18 +88,6 @@
     }, 1200);
   }
 
-  async function apiFetch(url, options = {}) {
-    const res = await fetch(url, {
-      headers: { 'Content-Type': 'application/json' },
-      ...options
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || '요청 처리 중 오류가 발생했습니다.');
-    }
-    return data;
-  }
-
   // ==========================================================================
   // GitHub Pages 등 정적 배포 환경을 위한 브라우저 직접 Perplexity API 연동 & 30분 스마트 캐시 엔진
   // ==========================================================================
@@ -111,23 +99,41 @@
   const CLIENT_UI_STATE_KEY = 'mk_pplx_ui_state_v1';
   const CLIENT_TREND_TTL_MS = 30 * 60 * 1000; // 30분 캐시
 
-  // 정적 호스팅 폴백용 기본값 (Netlify에서는 서버리스 환경 변수 PERPLEXITY_API_KEY가 /api/* 를 통해 자동 연동됨)
   function getDefaultTeamKey() {
     return '';
   }
 
+  // URL 해시(#pplx=... 또는 #key=...)나 쿼리(?pplx=... 또는 ?key=...)로 전달된 공유 키를 즉시 추출·저장
+  function extractSharedKeyFromUrl() {
+    try {
+      let sharedKey = '';
+      if (window.location.hash && (window.location.hash.includes('pplx=') || window.location.hash.includes('key='))) {
+        const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+        sharedKey = (hashParams.get('pplx') || hashParams.get('key') || '').trim();
+      }
+      if (!sharedKey && window.location.search && (window.location.search.includes('pplx=') || window.location.search.includes('key='))) {
+        const searchParams = new URLSearchParams(window.location.search);
+        sharedKey = (searchParams.get('pplx') || searchParams.get('key') || '').trim();
+      }
+      if (sharedKey && sharedKey.startsWith('pplx-')) {
+        localStorage.setItem(CLIENT_STORAGE_KEY, sharedKey);
+        localStorage.removeItem(CLIENT_DISCONNECTED_FLAG);
+        const cleanSearch = window.location.search
+          .replace(/([?&])(pplx|key)=[^&]*(&|$)/g, '$1')
+          .replace(/[?&]$/, '');
+        history.replaceState(null, '', window.location.pathname + cleanSearch);
+        return sharedKey;
+      }
+    } catch (e) {}
+    return '';
+  }
+
+  // 페이지 진입 즉시 URL 공유 키 감지 실행
+  extractSharedKeyFromUrl();
+
   function getClientPerplexityKey() {
     try {
-      // URL 해시(#pplx=...)로 전달된 공유 키가 있으면 즉시 저장 후 주소창 정리
-      if (window.location.hash && window.location.hash.includes('pplx=')) {
-        const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-        const sharedKey = (params.get('pplx') || '').trim();
-        if (sharedKey.startsWith('pplx-')) {
-          localStorage.setItem(CLIENT_STORAGE_KEY, sharedKey);
-          localStorage.removeItem(CLIENT_DISCONNECTED_FLAG);
-          history.replaceState(null, '', window.location.pathname + window.location.search);
-        }
-      }
+      extractSharedKeyFromUrl();
       if (localStorage.getItem(CLIENT_DISCONNECTED_FLAG) === '1') {
         return '';
       }
@@ -137,6 +143,24 @@
     } catch (e) {
       return getDefaultTeamKey();
     }
+  }
+
+  async function apiFetch(url, options = {}) {
+    const clientKey = getClientPerplexityKey();
+    const extraHeaders = clientKey ? { 'x-perplexity-key': clientKey } : {};
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...extraHeaders,
+        ...(options.headers || {})
+      }
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || '요청 처리 중 오류가 발생했습니다.');
+    }
+    return data;
   }
 
   function maskApiKey(k) {
@@ -795,10 +819,35 @@
         }));
       } catch (e) {}
     } catch (e) {
-      // 정적 배포(GitHub Pages 등) 환경: 브라우저에서 Perplexity API 직접 호출 (30분 스마트 캐시 적용)
+      // 정적 배포(GitHub Pages 등) 환경: 1순위 ./live-trends.json 실시간 수집 스냅샷 로드 (0.1초 즉시 응답, 실제 원문·쇼츠 링크 100% 보존)
+      let loadedFromStaticSnapshot = false;
+      try {
+        const snapRes = await fetch(`./live-trends.json?t=${Date.now()}`);
+        if (snapRes.ok) {
+          const snapData = await snapRes.json();
+          if (snapData && Array.isArray(snapData.shortFormTrends) && snapData.shortFormTrends.length > 0) {
+            state.trendRadar = {
+              googleTrends: snapData.googleTrends || [],
+              portalRetailTrends: snapData.portalRetailTrends || [],
+              shortFormTrends: snapData.shortFormTrends || [],
+              newsletterTrends: snapData.newsletterTrends || [],
+              brandPromoTrends: snapData.brandPromoTrends || []
+            };
+            try {
+              localStorage.setItem(CLIENT_TREND_CACHE_KEY, JSON.stringify({
+                timestamp: Date.now(),
+                data: state.trendRadar
+              }));
+            } catch (err) {}
+            loadedFromStaticSnapshot = true;
+          }
+        }
+      } catch (snapErr) {}
+
+      // 2순위: 스냅샷 파일이 없거나 강제 AI 갱신 시 브라우저 Perplexity API 직접 호출
       const clientKey = getClientPerplexityKey();
-      let loadedFromClientPplx = false;
-      if (clientKey) {
+      let loadedFromClientPplx = loadedFromStaticSnapshot;
+      if (!loadedFromClientPplx && clientKey) {
         try {
           if (!forceRefresh) {
             const cachedRaw = localStorage.getItem(CLIENT_TREND_CACHE_KEY);
@@ -809,11 +858,11 @@
                 stats.cacheHitsOnRefresh = (stats.cacheHitsOnRefresh || 0) + 1;
                 saveClientUsageStats(stats);
                 state.trendRadar = {
-                  googleTrends: (cachedObj.data?.googleTrends || []).length > 0 ? cachedObj.data.googleTrends : (CURATED_TREND_TOPICS.google || []),
-                  portalRetailTrends: (cachedObj.data?.portalRetailTrends || []).length > 0 ? cachedObj.data.portalRetailTrends : (CURATED_TREND_TOPICS.portalRetail || []),
-                  shortFormTrends: (cachedObj.data?.shortFormTrends || []).length > 0 ? cachedObj.data.shortFormTrends : (CURATED_TREND_TOPICS.shortForm || []),
-                  newsletterTrends: (cachedObj.data?.newsletterTrends || []).length > 0 ? cachedObj.data.newsletterTrends : (CURATED_TREND_TOPICS.newsletter || []),
-                  brandPromoTrends: (cachedObj.data?.brandPromoTrends || []).length > 0 ? cachedObj.data.brandPromoTrends : (CURATED_TREND_TOPICS.brandPromo || [])
+                  googleTrends: cachedObj.data?.googleTrends || [],
+                  portalRetailTrends: cachedObj.data?.portalRetailTrends || [],
+                  shortFormTrends: cachedObj.data?.shortFormTrends || [],
+                  newsletterTrends: cachedObj.data?.newsletterTrends || [],
+                  brandPromoTrends: cachedObj.data?.brandPromoTrends || []
                 };
                 loadedFromClientPplx = true;
               }
@@ -822,11 +871,11 @@
           if (!loadedFromClientPplx) {
             const pplxTrends = await fetchClientPerplexityTrends(clientKey);
             const mergedRadar = {
-              googleTrends: (pplxTrends.googleTrends || []).slice(0, 10).length > 0 ? pplxTrends.googleTrends.slice(0, 10) : (CURATED_TREND_TOPICS.google || []),
-              portalRetailTrends: (pplxTrends.portalRetailTrends || []).slice(0, 10).length > 0 ? pplxTrends.portalRetailTrends.slice(0, 10) : (CURATED_TREND_TOPICS.portalRetail || []),
-              shortFormTrends: (pplxTrends.shortFormTrends || []).slice(0, 10).length > 0 ? pplxTrends.shortFormTrends.slice(0, 10) : (CURATED_TREND_TOPICS.shortForm || []),
-              newsletterTrends: (pplxTrends.newsletterTrends || []).slice(0, 10).length > 0 ? pplxTrends.newsletterTrends.slice(0, 10) : (CURATED_TREND_TOPICS.newsletter || []),
-              brandPromoTrends: (pplxTrends.brandPromoTrends || []).slice(0, 10).length > 0 ? pplxTrends.brandPromoTrends.slice(0, 10) : (CURATED_TREND_TOPICS.brandPromo || [])
+              googleTrends: (pplxTrends.googleTrends || []).slice(0, 10),
+              portalRetailTrends: (pplxTrends.portalRetailTrends || []).slice(0, 10),
+              shortFormTrends: (pplxTrends.shortFormTrends || []).slice(0, 10),
+              newsletterTrends: (pplxTrends.newsletterTrends || []).slice(0, 10),
+              brandPromoTrends: (pplxTrends.brandPromoTrends || []).slice(0, 10)
             };
             state.trendRadar = mergedRadar;
             localStorage.setItem(CLIENT_TREND_CACHE_KEY, JSON.stringify({
@@ -858,11 +907,26 @@
   }
 
   async function loadConfig() {
+    const clientKey = getClientPerplexityKey();
     try {
       const cfg = await apiFetch('/api/config');
       state.isStaticHosting = false;
-      state.hasPerplexityKey = Boolean(cfg.hasPerplexityKey);
-      state.maskedKey = cfg.maskedKey || '';
+      const effectiveKey = (cfg.shareableKey || clientKey || '').trim();
+      if (effectiveKey && localStorage.getItem(CLIENT_DISCONNECTED_FLAG) !== '1') {
+        try {
+          localStorage.setItem(CLIENT_STORAGE_KEY, effectiveKey);
+        } catch (e) {}
+      }
+      if (clientKey && !cfg.hasPerplexityKey) {
+        try {
+          await apiFetch('/api/config', {
+            method: 'POST',
+            body: JSON.stringify({ perplexityApiKey: clientKey })
+          });
+        } catch (e) {}
+      }
+      state.hasPerplexityKey = Boolean(cfg.hasPerplexityKey || clientKey);
+      state.maskedKey = cfg.maskedKey || maskApiKey(clientKey) || '';
       if (cfg.apiUsageStats) {
         const localStats = getClientUsageStats();
         const mergedStats = (cfg.apiUsageStats.totalCalls >= (localStats.totalCalls || 0))
@@ -871,9 +935,8 @@
         saveClientUsageStats(mergedStats);
       }
     } catch (e) {
-      // GitHub Pages 등 정적 호스팅 환경: 클라이언트 기본 팀 키 또는 브라우저 저장 키 자동 활성화
+      // GitHub Pages 등 정적 호스팅 환경: URL 공유 키 또는 브라우저 저장 키 자동 활성화
       state.isStaticHosting = true;
-      const clientKey = getClientPerplexityKey();
       state.hasPerplexityKey = Boolean(clientKey);
       state.maskedKey = maskApiKey(clientKey);
       state.apiUsageStats = getClientUsageStats();
@@ -1007,6 +1070,18 @@
     renderGuideModalContent();
   }
 
+  function buildShareableTeamUrl() {
+    const shareBase = 'https://moneymoeungu.github.io/mk-pick-content-studio/public/index.html';
+    const activeKey = (getClientPerplexityKey() || localStorage.getItem(CLIENT_STORAGE_KEY) || '').trim();
+    return activeKey ? `${shareBase}#pplx=${encodeURIComponent(activeKey)}` : shareBase;
+  }
+
+  async function copyShareableTeamUrl() {
+    const targetUrl = buildShareableTeamUrl();
+    await navigator.clipboard.writeText(targetUrl);
+    showToast('✓ 다른 사람의 브라우저에서도 즉시 API가 연결되는 공유 링크가 복사되었습니다!');
+  }
+
   async function openApiKeyModal() {
     await loadConfig();
     const modalRoot = document.getElementById('modalRoot');
@@ -1021,7 +1096,7 @@
       estimatedCostKrw: 0,
       cacheHitsOnRefresh: 0
     };
-    const shareUrl = 'https://moneymoeungu.github.io/mk-pick-content-studio/';
+    const fullShareUrl = buildShareableTeamUrl();
 
     modalRoot.innerHTML = `
       <div style="position: fixed; inset: 0; background: rgba(17, 24, 39, 0.45); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 20px;">
@@ -1060,11 +1135,13 @@
           </div>
 
           ${state.hasPerplexityKey ? `
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--status-green); background: var(--status-green-bg); padding: 9px 12px; border-radius: var(--radius-general); margin-bottom: 12px; font-weight: 700;">
-              <span>✓ 현재 연결된 키: ${escapeHtml(state.maskedKey)} (팀 공유 배포 링크에서도 즉시 자동 연결됨)</span>
-              <button type="button" class="btn btn-sm" id="copyTeamShareUrlBtn" style="padding: 4px 9px; font-size: 11.5px; background: var(--white); color: var(--status-green); border-color: #8FD4B2; white-space: nowrap;">
-                🔗 팀 공유 링크 복사
-              </button>
+            <div style="font-size: 12.5px; color: var(--status-green); background: var(--status-green-bg); padding: 10px 12px; border-radius: var(--radius-general); margin-bottom: 12px; font-weight: 700;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <span>✓ 현재 연결된 키: ${escapeHtml(state.maskedKey)} (다른 브라우저에서도 공유 링크 접속 시 즉시 자동 연결)</span>
+                <button type="button" class="btn btn-sm" id="copyTeamShareUrlBtn" style="padding: 4px 10px; font-size: 11.5px; background: var(--white); color: var(--status-green); border-color: #8FD4B2; white-space: nowrap; font-weight: 800;">
+                  🔗 API 포함 공유 링크 복사
+                </button>
+              </div>
             </div>
           ` : ''}
 
@@ -1095,12 +1172,7 @@
     document.getElementById('closeApiModalBtn')?.addEventListener('click', closeModal);
     document.getElementById('cancelApiModalBtn')?.addEventListener('click', closeModal);
 
-    document.getElementById('copyTeamShareUrlBtn')?.addEventListener('click', async () => {
-      const customSaved = (localStorage.getItem(CLIENT_STORAGE_KEY) || '').trim();
-      const targetUrl = customSaved ? `${shareUrl}#pplx=${encodeURIComponent(customSaved)}` : shareUrl;
-      await navigator.clipboard.writeText(targetUrl);
-      showToast('✓ Perplexity API가 자동 연결되는 팀 공유 링크가 복사되었습니다!');
-    });
+    document.getElementById('copyTeamShareUrlBtn')?.addEventListener('click', copyShareableTeamUrl);
 
     document.getElementById('removeApiKeyBtn')?.addEventListener('click', async () => {
       try {
@@ -1181,6 +1253,11 @@
     const krw = state.apiUsageStats?.estimatedCostKrw || 0;
     meta.innerHTML = `
       <div class="flex-row" style="gap: 8px;">
+        ${state.hasPerplexityKey ? `
+          <button type="button" class="btn btn-sm" id="topbarCopyShareLinkBtn" style="border-color: #8FD4B2; color: var(--status-green); background-color: #FFFFFF; font-weight: 800;" title="다른 사람의 브라우저에서도 API 키가 자동 연결되는 공유 링크를 복사합니다">
+            🔗 API 포함 공유 링크 복사
+          </button>
+        ` : ''}
         <button type="button" class="btn btn-sm" id="openUserGuideModalBtn" style="border-color: var(--mk-orange); color: var(--mk-orange); background-color: #FFFFFF; font-weight: 800;">
           📖 사용 가이드 (PPT·PDF)
         </button>
@@ -1190,6 +1267,7 @@
       </div>
     `;
 
+    document.getElementById('topbarCopyShareLinkBtn')?.addEventListener('click', copyShareableTeamUrl);
     document.getElementById('openUserGuideModalBtn')?.addEventListener('click', openUserGuideModal);
     document.getElementById('openApiKeyModalBtn')?.addEventListener('click', openApiKeyModal);
 

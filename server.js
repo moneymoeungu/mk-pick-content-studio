@@ -1059,13 +1059,16 @@ const requestHandler = async (req, res) => {
   const pathname = parsedUrl.pathname.replace(/^\/\.netlify\/functions\/api/, '/api');
 
   try {
+    const headerKey = (req.headers?.['x-perplexity-key'] || '').trim();
+
     // 0. Perplexity API 키 설정 및 실시간 API 버닝(사용량·과금) 상태 조회 (/api/config)
     if (pathname === '/api/config' && req.method === 'GET') {
       const db = readDb();
-      const key = db.config?.perplexityApiKey || '';
+      const key = headerKey || db.config?.perplexityApiKey || '';
       return sendJson(res, 200, {
         hasPerplexityKey: Boolean(key),
         maskedKey: key ? `${key.slice(0, 8)}...${key.slice(-4)}` : '',
+        shareableKey: key,
         apiUsageStats
       });
     }
@@ -1083,6 +1086,7 @@ const requestHandler = async (req, res) => {
         ok: true,
         hasPerplexityKey: Boolean(rawKey),
         maskedKey: rawKey ? `${rawKey.slice(0, 8)}...${rawKey.slice(-4)}` : '',
+        shareableKey: rawKey,
         apiUsageStats
       });
     }
@@ -1090,7 +1094,7 @@ const requestHandler = async (req, res) => {
     // 1. 실시간 트렌드 레이더 API (30분 스마트 캐시 적용으로 단순 웹 접속·F5 새로고침 시 API 중복 버닝 원천 차단!)
     if (pathname === '/api/trends' && req.method === 'GET') {
       const db = readDb();
-      const apiKey = db.config?.perplexityApiKey || '';
+      const apiKey = headerKey || db.config?.perplexityApiKey || '';
       const explicitRefresh = parsedUrl.searchParams.get('refresh') === '1';
       const now = Date.now();
 
@@ -1107,6 +1111,15 @@ const requestHandler = async (req, res) => {
       const radar = await fetchLiveTrendRadar(apiKey, forcePplx);
       cachedTrendRadar = radar;
       cachedTrendTimestamp = now;
+      if (!IS_SERVERLESS) {
+        try {
+          fs.writeFileSync(
+            path.join(PUBLIC_DIR, 'live-trends.json'),
+            JSON.stringify({ updatedAt: new Date().toISOString(), ...radar }, null, 2),
+            'utf8'
+          );
+        } catch (e) {}
+      }
       return sendJson(res, 200, {
         ...radar,
         fromCache: false,
@@ -1131,7 +1144,7 @@ const requestHandler = async (req, res) => {
     if (pathname === '/api/works' && req.method === 'POST') {
       const body = await parseBody(req);
       const db = readDb();
-      const apiKey = db.config?.perplexityApiKey || '';
+      const apiKey = headerKey || (body.perplexityApiKey || '').trim() || db.config?.perplexityApiKey || '';
       const mode = body.mode || 'dynamic';
       const keyword = (body.keyword || CONTENT_TYPES[Number(body.typeId) || 4]?.exampleKeyword || '최신 트렌드').trim();
       const company = (body.company || '').trim();
@@ -1211,7 +1224,7 @@ const requestHandler = async (req, res) => {
       const workId = pathname.replace('/api/works/', '').replace('/refresh-news', '');
       const body = await parseBody(req);
       const db = readDb();
-      const apiKey = db.config?.perplexityApiKey || '';
+      const apiKey = headerKey || (body.perplexityApiKey || '').trim() || db.config?.perplexityApiKey || '';
       let idx = db.works.findIndex(w => w.id === workId);
       if (idx === -1) {
         const seedScenario = buildPresetScenario({
